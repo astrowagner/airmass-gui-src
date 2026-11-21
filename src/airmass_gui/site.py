@@ -135,6 +135,8 @@ input[type="checkbox"] { flex: none; }
 .chart-box { background: var(--bg); border: 1px solid var(--border);
              border-radius: 10px; padding: 0.5rem; min-width: 0;
              position: relative; }
+#summary-panel .sum-total { margin-bottom: 0.5rem; font-size: 0.82rem; color: var(--fg-dim); }
+#summary-panel .sum-total b { color: var(--fg); }
 #summary-panel .sum-target { margin: 0.35rem 0; font-size: 0.82rem; }
 #summary-panel .sum-target b { color: var(--fg); }
 #summary-panel .sum-day { display: block; margin-left: 1rem; color: var(--fg-dim);
@@ -1773,6 +1775,7 @@ function renderSummary() {
     dayStart = dayEnd;
   }
   var html = "", anyTarget = false;
+  var totals = [], okArrays = [];
   state.objects.forEach(function (obj, oi) {
     var name = obj.name || "Target " + (oi + 1);
     var raH, dec;
@@ -1791,6 +1794,10 @@ function renderSummary() {
     }
     var ok = altAt.map(function (a) { return a >= thrAlt; });
     var runs = trueRuns(ok, startMs, step);
+    okArrays.push(ok);
+    var tot = 0;
+    runs.forEach(function (run) { tot += (run[1] - run[0]) / 3600000; });
+    totals.push({ name: name, h: tot });
     html += '<div class="sum-target"><b>' + htmlEscape(name) + "</b>";
     var shownOnDay = {};
     runs.forEach(function (run) {
@@ -1837,6 +1844,20 @@ function renderSummary() {
     });
     html += "</div>";
   });
+  if (anyTarget) {
+    var anyOk = okArrays[0].slice();
+    okArrays.forEach(function (arr) {
+      for (var ai = 0; ai < arr.length; ai++) { if (arr[ai]) anyOk[ai] = true; }
+    });
+    var anyRuns = trueRuns(anyOk, startMs, step);
+    var anyH = 0;
+    anyRuns.forEach(function (run) { anyH += (run[1] - run[0]) / 3600000; });
+    var head = [];
+    totals.forEach(function (t) { head.push(htmlEscape(t.name) + " " + t.h.toFixed(1) + " h"); });
+    head.push("any target " + anyH.toFixed(1) + " h");
+    html = '<div class="sum-total"><b>Cumulative X \u2264 ' +
+           state.options.threshold.toFixed(2) + ':</b>  ' + head.join(";  ") + "</div>";
+  }
   if (!anyTarget) html = '<div class="sum-empty">Add a target to list its observing windows.</div>';
   box.innerHTML = html;
   $("summary-panel").style.display = "";

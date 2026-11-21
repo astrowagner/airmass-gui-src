@@ -145,6 +145,8 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<input id="threshold"', self.page)
         self.assertIn('<div id="summary">', self.page)
         self.assertIn("function renderSummary()", self.page)
+        self.assertIn("sum-total", self.page)
+        self.assertIn("any target", self.page)
 
     def test_moon_ui(self):
         """Moon checkbox and the three moon core functions are present."""
