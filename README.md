@@ -43,9 +43,9 @@ airmass-gui --site                  # writes site/index.html
 airmass-gui --site out/page.html    # or anywhere else
 ```
 
-Writes a single self-contained HTML page — no other files, no network access,
-no build step. Open it directly in a browser or drop the file into a GitHub
-Pages repository.
+Writes a single self-contained HTML page — no other files, no build step.
+It works fully offline; only the Simbad name lookup needs internet. Open it
+directly in a browser or drop the file into a GitHub Pages repository.
 
 The page is fully interactive: edit the observatory (preset or custom
 coordinates/time zone), the start time and duration, and the target list, with
@@ -57,7 +57,9 @@ The astronomy (sun position, precession, airmass) is computed in embedded
 JavaScript: entered ICRS coordinates are precessed to the mean equator/equinox
 of date (IAU 2006; nutation omitted) before altitudes are computed, so curves
 agree with the desktop app to ~0.01 deg (the difference is the omitted
-nutation). Simbad name lookup is available in the desktop app only.
+nutation). The **Simbad** button in the Targets panel looks a name up in CDS
+Simbad (mirrors tried in order), fills in the coordinates, and adds the target;
+that lookup needs internet access.
 
 ## Update
 

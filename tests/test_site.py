@@ -18,7 +18,7 @@ from astropy import units as u
 from astropy.coordinates import AltAz, SkyCoord, TETE, get_sun
 from astropy.time import Time
 
-from airmass_gui import astro, chart
+from airmass_gui import astro, chart, lookup
 from airmass_gui.observatories import PRESETS, to_dict
 from airmass_gui.site import build_site
 from airmass_gui.workspace import new_workspace
@@ -38,7 +38,7 @@ CORE_FUNCTIONS = [
     "wrap360", "d2r", "r2d", "jdFromUtcMs", "gmstMeeus", "lstDeg", "altitude",
     "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
-    "parseDec",
+    "parseDec", "simbadParseRecord",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -118,8 +118,12 @@ class SitePageTests(unittest.TestCase):
         name = html_mod.escape(self.data["observatory"]["name"])
         self.assertIn(f"<title>Airmass chart &mdash; {name}</title>", self.page)
 
-    def test_no_external_references(self):
-        for token in ("http", "src=", "href=", "url(", "@import"):
+    def test_no_external_asset_references(self):
+        # The page must be self-contained: no external assets may be loaded.
+        # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
+        # send Access-Control-Allow-Origin: *, so nothing is embedded.)
+        for token in ("<script src", "<link ", "@import", "url(", "<img",
+                      "<iframe", "<object", "<embed"):
             self.assertNotIn(token, self.page)
 
     def test_no_unreplaced_tokens(self):
@@ -322,6 +326,18 @@ class JsCoreNumericTests(unittest.TestCase):
                 astro.parse_dec(text)
             with self.assertRaises(Exception):
                 self._js(f"parseDec({json.dumps(text)})")
+
+    def test_simbad_parse(self):
+        # The page's parser must agree with the desktop app's on a real record.
+        fixture = (Path(__file__).parent / "fixtures" / "simbad_vega.txt").read_text(encoding="utf-8")
+        expected = lookup._parse_ascii_record(fixture)
+        got = self._js(f"simbadParseRecord({json.dumps(fixture)})")
+        self.assertIsNotNone(got, "JS parser found no coordinates")
+        self.assertEqual(got["name"], expected["name"])
+        self.assertAlmostEqual(got["raDeg"], expected["ra"], delta=1e-9)
+        self.assertAlmostEqual(got["dec"], expected["dec"], delta=1e-9)
+        no_coords = "C.D.S.  -  SIMBAD4\n\nSome object\n----\nno coordinates here"
+        self.assertIsNone(self._js(f"simbadParseRecord({json.dumps(no_coords)})"))
 
 
 if __name__ == "__main__":

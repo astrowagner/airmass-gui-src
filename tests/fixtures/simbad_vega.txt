@@ -1,0 +1,25 @@
+C.D.S.  -  SIMBAD4 rel 1.8  -  2026.11.21CET21:07:10
+
+Vega
+----
+
+Object * alf Lyr  ---  dS*  ---  OID=@2900336   (@@133322,0)  ---  coobox=19821
+
+Coordinates(ICRS,ep=J2000,eq=2000): 18 36 56.33635  +38 47 01.2802 (Opt ) A [3.51 2.81 90] 2007A&A...474..653V
+Coordinates(FK4,ep=B1950,eq=1950): 18 35 14.66709  +38 44 09.8043
+Coordinates(Gal,ep=J2000,eq=2000): 067.44820813  +19.23725227 
+hierarchy counts: #parents=1, #children=0, #siblings=0
+Proper motions: 200.94 286.23 [0.32 0.40 0] A 2007A&A...474..653V
+Parallax: 130.23 [0.36] A 2007A&A...474..653V
+Radial Velocity: -13.5 [0.4] C 2004A&A...420..183A
+Redshift: -0.000045 [0.000001] C 2004A&A...420..183A
+cz: -13.50 [0.40] C 2004A&A...420..183A
+Flux U : 0.03 [~] C 2002yCat.2237....0D
+Flux B : 0.03 [~] C 2002yCat.2237....0D
+Flux V : 0.03 [~] C 2002yCat.2237....0D
+Flux R : 0.07 [~] C 2002yCat.2237....0D
+Flux I : 0.10 [~] C 2002yCat.2237....0D
+Flux J : -0.177 [0.206] D 2003yCat.2246....0C
+Flux H : -0.029 [0.146] D 2003yCat.2246....0C
+Flux K : 0.129 [0.186] D 2003yCat.2246....0C
+Spectral type: A0V C 2024A&A...690A.176N
