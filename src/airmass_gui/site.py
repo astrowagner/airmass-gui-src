@@ -2588,15 +2588,12 @@ function csvEsc(s) {
 }
 
 /**
- * Render the chart: shading, window bands, target curves, moon, axes, and legend.
- *
- * Also writes the observing-window summary.
- */
-/**
  * Render the chart for the current state.
  *
- * Draws the twilight shading, the optional weather and twilight-line
- * overlays, the grid and axis labels of the selected curve
+ * Draws the twilight shading, the optional open-meteo cloud-cover band
+ * (fill height encodes the hourly percentage, capped at 30% of the
+ * plot height) and twilight-line overlays, the grid and axis labels of
+ * the selected curve
  * (state.options.curve: "airmass", "altitude", or "azimuth"), one curve
  * per target (interpolated from objCoords for moving targets), an
  * optional dashed Moon curve, and, in airmass mode only, the threshold
@@ -2677,6 +2674,7 @@ function draw() {
   }
 
   // cloud-cover band from the open-meteo forecast (behind grid and curves)
+  var wxShown = false;
   if (state.options.weather) {
     weatherRefresh();
     var wx = weatherHours();
@@ -2703,6 +2701,7 @@ function draw() {
         ctx.lineTo(X(wpts[wpts.length - 1].ms), plot.y + plot.h);
         ctx.closePath();
         ctx.fill();
+        wxShown = true;
       }
       ctx.restore();
     }
@@ -2927,6 +2926,12 @@ function draw() {
     legend.push({ name: "Moon", color: "#9aa5c4" });
   }
 
+  // Cloud-cover band entry; the swatch uses a higher alpha than the
+  // band itself so it reads at legend size.
+  if (wxShown)
+    legend.push({ name: "Cloud cover (fill height = %)",
+                  color: "rgb(185, 195, 215)", alpha: 0.45 });
+
   // plot border
   ctx.strokeStyle = THEME.border;
   ctx.lineWidth = 1;
@@ -3038,8 +3043,11 @@ function draw() {
     ctx.textAlign = "left";
     for (var le2 = 0; le2 < legend.length; le2++) {
       var yy = ly2 + pad + 10 + le2 * rowH;
+      var swa = ctx.globalAlpha;
+      if (legend[le2].alpha != null) ctx.globalAlpha = legend[le2].alpha;
       ctx.fillStyle = legend[le2].color;
       ctx.fillRect(lx + pad, yy - 8, sw, sw);
+      ctx.globalAlpha = swa;
       ctx.fillStyle = THEME.fg;
       ctx.fillText(legend[le2].name, lx + pad + sw + 6, yy);
     }

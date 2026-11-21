@@ -220,7 +220,7 @@ class TestWeatherPipelineLive(unittest.TestCase):
         self.assertIn("out of allowed range", status, status)
 
     def test_weather_fetch_and_summary(self):
-        """Checkbox toggle fetches within the safe horizon and renders."""
+        """Checkbox toggle fetches within the safe horizon and renders the band with its legend entry."""
         info = self._driver_result()
         self.assertEqual(info["fetches"], 1)
         self.assertIn("latitude=32.44278", info["url"])
@@ -563,7 +563,13 @@ async function __main() {
   hours.forEach(function (h) { if (h.ms >= s && h.ms <= e) inRange++; });
   if (inRange < 48) throw new Error("too few in-window hours: " + inRange);
 
+  var __texts = [];
+  var __ft = __ctx.fillText;
+  __ctx.fillText = function (s) { __texts.push(String(s)); return __ft.apply(this, arguments); };
   draw();
+  __ctx.fillText = __ft;
+  if (__texts.join("\u0001").indexOf("Cloud cover (fill height = %)") === -1)
+    throw new Error("legend missing the cloud cover entry");
   var status = String($("status").textContent);
   if (status !== "") throw new Error("weather fetch set status: " + status);
   var sum = $("summary").innerHTML;
