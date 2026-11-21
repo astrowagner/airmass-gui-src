@@ -1,0 +1,4 @@
+#!/bin/sh
+# Launcher: run airmass-gui from this checkout, no setup needed.
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/.venv/bin/python3" -m airmass_gui "$@"

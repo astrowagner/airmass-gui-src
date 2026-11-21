@@ -1,0 +1,199 @@
+"""Airmass and solar-altitude calculations for airmass charts."""
+from __future__ import annotations
+
+import numpy as np
+from astropy import units as u
+from astropy.coordinates import EarthLocation, AltAz, SkyCoord, get_sun
+from astropy.time import Time
+
+from .observatories import Observatory
+
+STEP_MINUTES = 5
+
+
+def location(obs: Observatory) -> EarthLocation:
+    return EarthLocation(lat=obs.lat * u.deg, lon=obs.lon * u.deg, height=obs.elevation_m * u.m)
+
+
+# Kasten & Young (1989) gives X ~= 0.9997 at the zenith; normalize so X(90 deg) = 1 exactly.
+_ZENITH_X = 1.0 / (1.0 + 0.50572 * (90.0 + 6.07995) ** -1.6364)
+
+
+def kasty_airmass(alt_deg):
+    """Kasten & Young (1989) airmass, normalized so X(90 deg) = 1 exactly.
+
+    X = 1 / (sin h + 0.50572 (h + 6.07995)^-1.6364), divided by its zenith value.
+    Finite at the horizon (X ~= 37.93 at 0 deg); extrapolates below it."""
+    alt = np.asarray(alt_deg, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        raw = 1.0 / (np.sin(np.deg2rad(alt)) + 0.50572 * np.power(alt + 6.07995, -1.6364))
+    return raw / _ZENITH_X
+
+
+def airmass_from_altitude(alt_deg):
+    """Airmass X (Kasten & Young 1989, zenith-normalized) for altitude in degrees; inf below the horizon."""
+    alt = np.atleast_1d(np.asarray(alt_deg, dtype=float))
+    return np.where(alt > 0.0, kasty_airmass(alt), np.inf)
+
+
+def horizon_airmass() -> float:
+    """Airmass at the horizon (altitude 0 deg), ~= 37.93."""
+    return float(kasty_airmass(0.0))
+
+
+def altitude_from_airmass(x, tol_deg: float = 1e-9, max_iter: int = 100):
+    """Numerical inverse of Kasten & Young: airmass X -> altitude in degrees.
+
+    Defined for 1 <= X <= horizon_airmass(); out-of-range input is clipped.
+    Returns an array (1-D, length 1 for scalar input)."""
+    target = np.clip(np.atleast_1d(np.asarray(x, dtype=float)), 1.0, horizon_airmass())
+    out = np.where(target <= 1.0, 90.0, np.full_like(target, np.nan))
+    need = target > 1.0
+    if not need.any():
+        return out
+    # airmass decreases with altitude: X(mid) > target means we must go higher.
+    # (K&Y dips ~3e-8 below 1 just under the zenith; handled by the clamp above.)
+    t = target[need]
+    lo = np.zeros_like(t)
+    hi = np.full_like(t, 90.0)
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        if np.all(hi - lo <= tol_deg):
+            break
+        up = kasty_airmass(mid) > t
+        lo = np.where(up, mid, lo)
+        hi = np.where(up, hi, mid)
+    out[need] = 0.5 * (lo + hi)
+    return out
+
+
+def time_grid(start: Time, end: Time, minutes: int = STEP_MINUTES) -> Time:
+    n = int(np.ceil((end - start).to_value(u.min) / minutes)) + 1
+    return start + np.arange(n) * (minutes * u.min)
+
+
+def airmass_series(obs: Observatory, coord: SkyCoord, start: Time, end: Time, minutes: int = STEP_MINUTES):
+    """Return (times, altitude_deg, airmass) sampled across [start, end]."""
+    times = time_grid(start, end, minutes)
+    frame = AltAz(obstime=times, location=location(obs))
+    alt = coord.transform_to(frame).alt.to_value(u.deg)
+    return times, alt, airmass_from_altitude(alt)
+
+
+def _classify(alt: float) -> str:
+    if alt > 0.0:
+        return "day"
+    if alt > -6.0:
+        return "civil"
+    if alt > -12.0:
+        return "nautical"
+    if alt > -18.0:
+        return "astro"
+    return "night"
+
+
+def sun_shading_intervals(obs: Observatory, start: Time, end: Time, minutes: int = 10):
+    """Return (mjd_start, mjd_end, kind) intervals; kind in day/civil/nautical/astro/night."""
+    times = time_grid(start, end, minutes)
+    frame = AltAz(obstime=times, location=location(obs))
+    alt = get_sun(times).transform_to(frame).alt.to_value(u.deg)
+    mjd = times.to_value("mjd")
+    events: set[float] = set()
+    for threshold in (0.0, -6.0, -12.0, -18.0):
+        arr = alt - threshold
+        idx = np.where(np.sign(arr[:-1]) != np.sign(arr[1:]))[0]
+        for i in idx:
+            a0, a1 = float(arr[i]), float(arr[i + 1])
+            events.add(float(mjd[i] + a0 / (a0 - a1) * (mjd[i + 1] - mjd[i])))
+    bounds = [float(start.to_value("mjd"))] + sorted(events) + [float(end.to_value("mjd"))]
+    intervals = []
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        if b - a < 1e-6:
+            continue
+        alt_mid = float(np.interp((a + b) / 2.0, mjd, alt))
+        intervals.append((a, b, _classify(alt_mid)))
+    return intervals
+
+
+def _parts(text: str) -> list[float]:
+    s = text.strip().lower()
+    for token in ("h", "m", "s", "deg", "d", "\u00b0", "\u2032", "\u2033"):
+        s = s.replace(token, " ")
+    return [float(part) for part in s.replace(":", " ").split()]
+
+
+def parse_ra(text: str) -> float:
+    """Parse RA as h:m:s, h m s, decimal hours, or decimal degrees (if > 24). Returns hours."""
+    s = text.strip()
+    if not s:
+        raise ValueError("RA is empty")
+    if ":" in s or any(ch in s.lower() for ch in "hms"):
+        vals = _parts(s)
+        if not 1 <= len(vals) <= 3:
+            raise ValueError(f"unparseable RA: {text!r}")
+        while len(vals) < 3:
+            vals.append(0.0)
+        hours, minutes, seconds = vals
+        if abs(minutes) >= 60 or abs(seconds) >= 60:
+            raise ValueError(f"unparseable RA: {text!r}")
+        return (hours + minutes / 60.0 + seconds / 3600.0) % 24.0
+    value = float(s)
+    if value > 24.0:
+        value /= 15.0  # decimal degrees -> decimal hours
+    return value % 24.0
+
+
+def parse_dec(text: str) -> float:
+    """Parse Dec as d:m:s, d m s, or decimal degrees. Returns degrees."""
+    s = text.strip()
+    if not s:
+        raise ValueError("Dec is empty")
+    if ":" in s or any(ch in s for ch in "\u00b0\u2032\u2033") or any(ch in s.lower() for ch in "dms"):
+        vals = _parts(s)
+        if not 1 <= len(vals) <= 3:
+            raise ValueError(f"unparseable Dec: {text!r}")
+        while len(vals) < 3:
+            vals.append(0.0)
+        deg, minutes, seconds = vals
+        if abs(minutes) >= 60 or abs(seconds) >= 60:
+            raise ValueError(f"unparseable Dec: {text!r}")
+        sign = -1.0 if deg < 0 else 1.0
+        return sign * (abs(deg) + minutes / 60.0 + seconds / 3600.0)
+    value = float(s)
+    if abs(value) > 90.0:
+        raise ValueError(f"Dec out of range: {text!r}")
+    return value
+
+
+def sky_coord_from_entries(ra_text: str, dec_text: str) -> SkyCoord:
+    return SkyCoord(ra=parse_ra(ra_text) * u.hourangle, dec=parse_dec(dec_text) * u.deg, frame="icrs")
+
+
+def format_ra_hours(degrees: float) -> str:
+    """Decimal degrees -> 'HH:MM:SS.ss' (hour angle convention)."""
+    hours = (degrees / 15.0) % 24.0
+    h = int(hours)
+    m = int((hours - h) * 60)
+    s = (hours - h - m / 60.0) * 3600.0
+    if s >= 59.95:
+        s -= 60.0
+        m += 1
+    if m >= 60:
+        m -= 60
+        h = (h + 1) % 24
+    return f"{h:02d}:{m:02d}:{s:05.2f}"
+
+
+def format_dec_dms(degrees: float) -> str:
+    """Decimal degrees -> '+DD:MM:SS.ss'."""
+    sign = "-" if degrees < 0 else "+"
+    d = int(abs(degrees))
+    m = int((abs(degrees) - d) * 60)
+    s = (abs(degrees) - d - m / 60.0) * 3600.0
+    if s >= 59.95:
+        s -= 60.0
+        m += 1
+    if m >= 60:
+        m -= 60
+        d += 1
+    return f"{sign}{d:02d}:{m:02d}:{s:05.2f}"
