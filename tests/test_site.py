@@ -229,6 +229,16 @@ class SitePageTests(unittest.TestCase):
         for name in CORE_FUNCTIONS:
             self.assertRegex(self.core, rf"function {name}\(")
 
+    def test_curve_control_present(self):
+        """The Display panel offers the three curve modes and a handler."""
+        self.assertIn('<select id="curve-sel">', self.page)
+        for mode, label in (("airmass", "Airmass"),
+                            ("altitude", "Altitude"),
+                            ("azimuth", "Azimuth")):
+            self.assertIn('<option value="%s">%s</option>' % (mode, label), self.page)
+        self.assertIn('$("curve-sel").addEventListener("change"', self.page)
+        self.assertIn('state.options.curve = this.value', self.page)
+
     def test_script_injection_is_neutralized(self):
         """A hostile object name cannot open a second script tag."""
         data = new_workspace()

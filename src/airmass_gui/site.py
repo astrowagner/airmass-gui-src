@@ -193,6 +193,11 @@ footer li { margin-bottom: 0.2rem; }
     <h2>Display</h2>
     <label class="field"><span>Windows</span><input id="windows-chk" type="checkbox" checked></label>
     <label class="field"><span>Max airmass</span><input id="threshold" type="number" step="0.1" min="1.05"></label>
+    <label class="field"><span>Curve</span><select id="curve-sel">
+      <option value="airmass">Airmass</option>
+      <option value="altitude">Altitude</option>
+      <option value="azimuth">Azimuth</option>
+    </select></label>
     <label class="field"><span>Moon</span><input id="moon-chk" type="checkbox"></label>
     <label class="field"><span>Civil twilight</span><input id="civil-chk" type="checkbox"></label>
     <label class="field"><span>Nautical twilight</span><input id="nautical-chk" type="checkbox"></label>
@@ -1355,7 +1360,8 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
  * Keeps older saved states and imported files working.
  *
  * @param {Object} s - Workspace state; its options object is completed
- *     in place.
+ *     in place. The curve option is validated against the three modes and
+ *     falls back to "airmass".
  * @returns {Object} The same state object.
  */
 function normalizeState(s) {
@@ -1368,10 +1374,13 @@ function normalizeState(s) {
     dusk: true,
     calendar: true,
     weather: false,
+    curve: "airmass",
   };
   if (s.options) {
     for (var k in opts) { if (s.options[k] != null) opts[k] = s.options[k]; }
   }
+  if (opts.curve !== "airmass" && opts.curve !== "altitude" && opts.curve !== "azimuth")
+    opts.curve = "airmass";
   s.options = opts;
   return s;
 }
@@ -1608,6 +1617,7 @@ function syncAllControls() {
   $("days").value = state.time_range.days;
   $("windows-chk").checked = !!state.options.windows;
   $("threshold").value = state.options.threshold;
+  $("curve-sel").value = state.options.curve;
   $("moon-chk").checked = !!state.options.moon;
   $("civil-chk").checked = !!state.options.civil;
   $("nautical-chk").checked = !!state.options.nautical;
@@ -1852,6 +1862,7 @@ function exportWorkspace() {
 var canvas = $("chart");
 var ctx = canvas.getContext("2d");
 var lastPlot = null;  // plot rectangle from the most recent draw()
+var lastCurve = null;  // curve mode drawn in the most recent draw()
 var view = null;      // current time window {t0, t1}; null = full range
 var dragState = null; // in-progress edge/pan drag
 
@@ -2257,6 +2268,23 @@ function csvEsc(s) {
  *
  * Also writes the observing-window summary.
  */
+/**
+ * Render the chart for the current state.
+ *
+ * Draws the twilight shading, the optional weather and twilight-line
+ * overlays, the grid and axis labels of the selected curve
+ * (state.options.curve: "airmass", "altitude", or "azimuth"), one curve
+ * per target (interpolated from objCoords for moving targets), an
+ * optional dashed Moon curve, and, in airmass mode only, the threshold
+ * line, the X = 2 reference, and the per-target usable-window bands with
+ * transit ticks.
+ *
+ * @returns {undefined} Nothing returned.
+ *
+ * Outputs: the canvas contents, lastPlot (plot rectangle), lastCurve
+ *     (curve mode used), the status bar (empty on success), and the
+ *     summary and calendar panels.
+ */
 function draw() {
   var size = sizeCanvas();
   var w = size.w, h = size.h;
@@ -2307,8 +2335,12 @@ function draw() {
   lastPlot = plot;
   var vr = viewRange();
   var v0 = vr.t0, v1 = vr.t1;
+  var curve = state.options.curve;
+  var yMax = curve === "azimuth" ? 360 : 90;
+  lastCurve = curve;
   function X(ms) { return plot.x + ((ms - v0) / (v1 - v0)) * plot.w; }
-  function Y(alt) { return plot.y + (1 - alt / 90) * plot.h; }
+  /** Map a curve value (altitude for the airmass and altitude curves, azimuth for the azimuth curve) to pixel y. */
+  function Y(v) { return plot.y + (1 - v / yMax) * plot.h; }
 
   // axis background + twilight shading
   ctx.fillStyle = THEME.axes_bg;
@@ -2373,9 +2405,34 @@ function draw() {
   // grid
   ctx.strokeStyle = "rgba(69, 71, 90, 0.6)";
   ctx.lineWidth = 1;
+  var altTicks = [0, 15, 30, 45, 60, 75, 90];
   var airTicks = [1, 1.5, 2, 4, 8, 20];
-  for (var gi = 0; gi < airTicks.length; gi++) {
-    var gy = Y(altFromAirmass(airTicks[gi]));
+  var azTicks = [0, 45, 90, 135, 180, 225, 270, 315, 360];
+  var gridVals, leftVals, leftF, leftFmt, rightVals = null, rightF = null, rightFmt = null;
+  if (curve === "azimuth") {
+    gridVals = azTicks;
+    leftVals = azTicks;
+    leftF = function (v) { return Y(v); };
+    leftFmt = function (v) { return v + "\u00b0"; };
+  } else if (curve === "altitude") {
+    gridVals = altTicks;
+    leftVals = altTicks;
+    leftF = function (v) { return Y(v); };
+    leftFmt = function (v) { return v + "\u00b0"; };
+    rightVals = airTicks;
+    rightF = function (v) { return Y(altFromAirmass(v)); };
+    rightFmt = function (v) { return String(v); };
+  } else {
+    gridVals = airTicks;
+    leftVals = airTicks;
+    leftF = function (v) { return Y(altFromAirmass(v)); };
+    leftFmt = function (v) { return String(v); };
+    rightVals = altTicks;
+    rightF = function (v) { return Y(v); };
+    rightFmt = function (v) { return v + "\u00b0"; };
+  }
+  for (var gi = 0; gi < gridVals.length; gi++) {
+    var gy = leftF(gridVals[gi]);
     ctx.beginPath(); ctx.moveTo(plot.x, gy); ctx.lineTo(plot.x + plot.w, gy); ctx.stroke();
   }
   for (var gi2 = 0; gi2 < ticks.length; gi2++) {
@@ -2383,7 +2440,8 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(gx, plot.y); ctx.lineTo(gx, plot.y + plot.h); ctx.stroke();
   }
 
-  // X = 2 reference line
+  // X = 2 reference line (airmass curve only)
+  if (curve === "airmass") {
   var y2 = Y(altFromAirmass(2));
   ctx.save();
   ctx.setLineDash([3, 3]);
@@ -2394,6 +2452,7 @@ function draw() {
   ctx.font = "11px " + FONT;
   ctx.textAlign = "right";
   ctx.fillText("X = 2", plot.x + plot.w - 4, y2 + 13);
+  }
 
   // parse all targets up front (shared by window bands, curves, and summary)
   var errors = [], below = [], legend = [];
@@ -2410,7 +2469,7 @@ function draw() {
   });
 
   // airmass threshold line + per-target usable-window bands (behind curves)
-  if (state.options.windows) {
+  if (state.options.windows && curve === "airmass") {
     var thrAlt = altFromAirmass(state.options.threshold);
     var yt = Y(thrAlt);
     ctx.save();
@@ -2469,9 +2528,11 @@ function draw() {
       var jd = jdFromUtcMs(ms);
       var c = objCoords(tobj, ms);
       var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
-      pts.push([ms, airmass(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon))]);
+      var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
+      pts.push([ms, hd.alt, hd.az, airmass(hd.alt)]);
     }
-    var finite = pts.filter(function (p) { return isFinite(p[1]); });
+    var vi = curve === "azimuth" ? 2 : (curve === "airmass" ? 3 : 1);
+    var finite = pts.filter(function (p) { return isFinite(p[vi]); });
     if (finite.length === 0) return;
     var cstep = Math.max(15 * 60 * 1000, (endMs - startMs) / 400);
     var rises = false;
@@ -2482,24 +2543,34 @@ function draw() {
       if (altitude(ctt.raDeg / 15, ctt.dec, cjd, obs.lat, obs.lon) > 0) { rises = true; break; }
     }
     if (!rises) below.push(name);
-    var minP = finite[0];
+    var labP = finite[0];
     for (var fi = 1; fi < finite.length; fi++) {
-      if (finite[fi][1] < minP[1]) minP = finite[fi];
+      if (curve === "altitude") { if (finite[fi][vi] > labP[vi]) labP = finite[fi]; }
+      else if (finite[fi][vi] < labP[vi]) labP = finite[fi];
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.6;
     ctx.beginPath();
-    var open = false;
+    var open = false, prevVal = null;
     for (var pi = 0; pi < pts.length; pi++) {
-      if (!isFinite(pts[pi][1])) { open = false; continue; }
-      var px = X(pts[pi][0]), py = Y(altFromAirmass(pts[pi][1]));
+      var val = pts[pi][vi];
+      if (!isFinite(val)) { open = false; prevVal = null; continue; }
+      if (open && curve === "azimuth" && prevVal !== null &&
+          Math.abs(val - prevVal) > 180) open = false;
+      var px = X(pts[pi][0]), py = curve === "airmass" ? Y(altFromAirmass(val)) : Y(val);
       if (!open) { ctx.moveTo(px, py); open = true; } else ctx.lineTo(px, py);
+      prevVal = val;
     }
     ctx.stroke();
-    ctx.fillStyle = color;
-    ctx.font = "11px " + FONT;
-    ctx.textAlign = "left";
-    ctx.fillText("min " + minP[1].toFixed(2), X(minP[0]) + 5, Y(altFromAirmass(minP[1])) + 14);
+    if (curve !== "azimuth") {
+      ctx.fillStyle = color;
+      ctx.font = "11px " + FONT;
+      ctx.textAlign = "left";
+      if (curve === "airmass")
+        ctx.fillText("min " + labP[vi].toFixed(2), X(labP[0]) + 5, Y(altFromAirmass(labP[vi])) + 14);
+      else
+        ctx.fillText("max " + labP[vi].toFixed(1) + "\u00b0", X(labP[0]) + 5, Y(labP[vi]) + 14);
+    }
     legend.push({ name: name, color: color });
   });
 
@@ -2511,16 +2582,21 @@ function draw() {
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     var moonOpen = false;
+    var mprev = null;
     for (var mk = 0; mk < n; mk++) {
       var ms = v0 + mk * step;
       if (ms > v1) break;
       var jd = jdFromUtcMs(ms);
       var mr = moonRaDec(jd);
-      var mAlt = altitude(mr.raH, mr.dec, jd, obs.lat, obs.lon);
-      var mX = airmass(mAlt);
-      if (!isFinite(mX)) { moonOpen = false; continue; }
-      var mpx = X(ms), mpy = Y(altFromAirmass(mX));
+      var mhd = horizonCoords(mr.raH, mr.dec, jd, obs.lat, obs.lon);
+      var mval = curve === "azimuth" ? mhd.az
+                 : (curve === "airmass" ? airmass(mhd.alt) : mhd.alt);
+      if (!isFinite(mval)) { moonOpen = false; mprev = null; continue; }
+      if (moonOpen && curve === "azimuth" && mprev !== null &&
+          Math.abs(mval - mprev) > 180) moonOpen = false;
+      var mpx = X(ms), mpy = curve === "airmass" ? Y(altFromAirmass(mval)) : Y(mval);
       if (!moonOpen) { ctx.moveTo(mpx, mpy); moonOpen = true; } else ctx.lineTo(mpx, mpy);
+      mprev = mval;
     }
     ctx.stroke();
     ctx.restore();
@@ -2537,17 +2613,18 @@ function draw() {
   ctx.strokeStyle = THEME.fg;
   ctx.fillStyle = THEME.fg;
   ctx.textAlign = "right";
-  for (var li = 0; li < airTicks.length; li++) {
-    var ly = Y(altFromAirmass(airTicks[li]));
-    ctx.fillText(String(airTicks[li]), plot.x - 6, ly + 3.5);
+  for (var li = 0; li < leftVals.length; li++) {
+    var ly = leftF(leftVals[li]);
+    ctx.fillText(leftFmt(leftVals[li]), plot.x - 6, ly + 3.5);
     ctx.beginPath(); ctx.moveTo(plot.x - 4, ly); ctx.lineTo(plot.x, ly); ctx.stroke();
   }
-  ctx.textAlign = "left";
-  var altTicks = [0, 15, 30, 45, 60, 75, 90];
-  for (var ai = 0; ai < altTicks.length; ai++) {
-    var ay = Y(altTicks[ai]);
-    ctx.fillText(altTicks[ai] + "\u00b0", plot.x + plot.w + 6, ay + 3.5);
-    ctx.beginPath(); ctx.moveTo(plot.x + plot.w, ay); ctx.lineTo(plot.x + plot.w + 4, ay); ctx.stroke();
+  if (rightVals) {
+    ctx.textAlign = "left";
+    for (var ai = 0; ai < rightVals.length; ai++) {
+      var ay = rightF(rightVals[ai]);
+      ctx.fillText(rightFmt(rightVals[ai]), plot.x + plot.w + 6, ay + 3.5);
+      ctx.beginPath(); ctx.moveTo(plot.x + plot.w, ay); ctx.lineTo(plot.x + plot.w + 4, ay); ctx.stroke();
+    }
   }
   var fmt = fmtLabel(tz);
   var lastRight = -Infinity;
@@ -2606,16 +2683,20 @@ function draw() {
   // axis labels
   ctx.textAlign = "center";
   ctx.fillText("Local time (" + (obs.timezone || "UTC") + ")", plot.x + plot.w / 2, h - 8);
+  var leftAxis = curve === "azimuth" ? "Azimuth" : curve === "altitude" ? "Altitude" : "Airmass X";
+  var rightAxis = curve === "altitude" ? "Airmass X" : "Altitude";
   ctx.save();
   ctx.translate(12, plot.y + plot.h / 2);
   ctx.rotate(-Math.PI / 2);
-  ctx.fillText("Airmass X", 0, 0);
+  ctx.fillText(leftAxis, 0, 0);
   ctx.restore();
-  ctx.save();
-  ctx.translate(w - 8, plot.y + plot.h / 2);
-  ctx.rotate(Math.PI / 2);
-  ctx.fillText("Altitude", 0, 0);
-  ctx.restore();
+  if (curve !== "azimuth") {
+    ctx.save();
+    ctx.translate(w - 8, plot.y + plot.h / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillText(rightAxis, 0, 0);
+    ctx.restore();
+  }
 
   // legend (upper left)
   if (legend.length > 0) {
@@ -3069,6 +3150,11 @@ $("weather-chk").addEventListener("change", function () {
 });
 $("calendar-chk").addEventListener("change", function () {
   state.options.calendar = this.checked;
+  saveState();
+  scheduleRedraw();
+});
+$("curve-sel").addEventListener("change", function () {
+  state.options.curve = this.value;
   saveState();
   scheduleRedraw();
 });
