@@ -43,7 +43,7 @@ CORE_FUNCTIONS = [
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
     "parseDec", "simbadParseRecord",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
-    "trueRuns", "transitTimes", "twilightEvents",
+    "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep",
 ]
 
@@ -159,6 +159,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<input id="nautical-chk"', self.page)
         self.assertIn('"touchstart"', self.page)
         self.assertIn('"keydown"', self.page)
+
+    def test_dawn_dusk_ticks(self):
+        """Dawn/dusk ticks checkbox and the sunEvents core function are present."""
+        self.assertIn('<input id="dusk-chk"', self.page)
+        self.assertIn("state.options.dusk", self.page)
+        self.assertIn("function sunEvents(", self.core)
 
     def test_shareable_url(self):
         """Share button and the encode/decode core functions are present."""
@@ -593,6 +599,33 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertEqual(len(got), len(ref), thr)
             for g, r in zip(got, ref):
                 self.assertAlmostEqual(g, r, delta=30000.0)  # 30 s
+
+    def test_sun_events(self):
+        """sunEvents boundaries match astro.sun_shading_intervals at all four thresholds, with the right direction."""
+        start = Time("2026-11-20 00:00:00")
+        end = Time("2026-11-21 00:00:00")
+        intervals = astro.sun_shading_intervals(LBT, start, end)
+        kinds = [k for (_a, _b, k) in intervals]
+        bounds = [float(start.to_value("mjd"))] + [float(b) for (_a, b, _k) in intervals]
+        start_ms = float(start.to_value("unix")) * 1000.0
+        end_ms = float(end.to_value("unix")) * 1000.0
+        got = json.loads(
+            self._js(f"JSON.stringify(sunEvents({start_ms}, {end_ms}, {LBT.lat}, {LBT.lon}))")
+        )
+        side = {0: {"day"}, -6: {"day", "civil"}, -12: {"day", "civil", "nautical"},
+                -18: {"day", "civil", "nautical", "astro"}}
+        for thr in (0, -6, -12, -18):
+            ref = []
+            for i in range(len(kinds) - 1):
+                if (kinds[i] in side[thr]) != (kinds[i + 1] in side[thr]):
+                    ref.append((bounds[i + 1] - 40587.0) * 86400000.0)
+            evs = [e for e in got if e["alt"] == thr]
+            self.assertEqual(len(evs), len(ref), thr)
+            for g, r in zip(evs, ref):
+                self.assertAlmostEqual(g["ms"], r, delta=120000.0)  # 120 s
+        zeros = [e for e in got if e["alt"] == 0]
+        # span starts 17:00 local: first crossing is sunset, then sunrise
+        self.assertEqual([e["dir"] for e in zeros], [-1, 1])
 
     def test_moon_position(self):
         """moonRaDec is within 0.03 deg of astropy's full-ELP Moon."""

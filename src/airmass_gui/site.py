@@ -184,6 +184,7 @@ footer li { margin-bottom: 0.2rem; }
     <label class="field"><span>Moon</span><input id="moon-chk" type="checkbox"></label>
     <label class="field"><span>Civil twilight</span><input id="civil-chk" type="checkbox"></label>
     <label class="field"><span>Nautical twilight</span><input id="nautical-chk" type="checkbox"></label>
+    <label class="field"><span>Dawn/dusk ticks</span><input id="dusk-chk" type="checkbox" checked></label>
   </div>
   <div class="panel">
     <h2>Targets</h2>
@@ -672,6 +673,36 @@ function twilightEvents(startMs, endMs, latDeg, lonDeg, altThreshold) {
     }
     prev = a;
   }
+  return out;
+}
+
+/**
+ * Times at which the Sun crosses 0, -6, -12, -18 deg, with direction.
+ *
+ * The IAU twilight limits, lettered S (sunrise/sunset), C (civil),
+ * N (nautical) and A (astronomical). Built on twilightEvents; each
+ * crossing records the Sun's direction, dir, of +1 rising or -1
+ * setting, from the altitude 5 min either side of the crossing.
+ *
+ * @param {number} startMs - Scan start, epoch ms.
+ * @param {number} endMs - Scan end, epoch ms.
+ * @param {number} latDeg - Observer latitude in degrees.
+ * @param {number} lonDeg - Observer longitude in degrees, positive east.
+ * @returns {Object[]} Crossings sorted by time; each entry is
+ *     {ms (epoch ms), alt (the threshold in degrees), dir (+1 or -1)}.
+ */
+function sunEvents(startMs, endMs, latDeg, lonDeg) {
+  var thresholds = [0, -6, -12, -18];
+  var out = [];
+  for (var ti = 0; ti < thresholds.length; ti++) {
+    var evs = twilightEvents(startMs, endMs, latDeg, lonDeg, thresholds[ti]);
+    for (var ei = 0; ei < evs.length; ei++) {
+      var a = sunAltitude(jdFromUtcMs(evs[ei] - 5 * 60 * 1000), latDeg, lonDeg);
+      var b = sunAltitude(jdFromUtcMs(evs[ei] + 5 * 60 * 1000), latDeg, lonDeg);
+      out.push({ ms: evs[ei], alt: thresholds[ti], dir: b > a ? 1 : -1 });
+    }
+  }
+  out.sort(function (p, q) { return p.ms - q.ms; });
   return out;
 }
 
@@ -1212,6 +1243,7 @@ function normalizeState(s) {
     moon: false,
     civil: false,
     nautical: false,
+    dusk: true,
   };
   if (s.options) {
     for (var k in opts) { if (s.options[k] != null) opts[k] = s.options[k]; }
@@ -1455,6 +1487,7 @@ function syncAllControls() {
   $("moon-chk").checked = !!state.options.moon;
   $("civil-chk").checked = !!state.options.civil;
   $("nautical-chk").checked = !!state.options.nautical;
+  $("dusk-chk").checked = !!state.options.dusk;
   $("summary-panel").style.display = state.options.windows ? "" : "none";
   renderTargets();
 }
@@ -1859,7 +1892,7 @@ function draw() {
     return;
   }
 
-  var M = { l: 56, r: 52, t: 52, b: 44 };
+  var M = { l: 56, r: 52, t: 52, b: 58 };
   var plot = { x: M.l, y: M.t, w: w - M.l - M.r, h: h - M.t - M.b };
   lastPlot = plot;
   var vr = viewRange();
@@ -2082,6 +2115,46 @@ function draw() {
     if (tx - tw / 2 >= lastRight + 4) {
       ctx.fillText(label, tx, plot.y + plot.h + 17);
       lastRight = tx + tw / 2;
+    }
+  }
+
+  // Dawn/dusk ticks: S/C/N/A letters with rising/setting arrows below the axis
+  if (state.options.dusk) {
+    var duskSpecs = [
+      { alt: 0, letter: "S", color: THEME.fg },
+      { alt: -6, letter: "C", color: "#ffd966" },
+      { alt: -12, letter: "N", color: "#89b4d6" },
+      { alt: -18, letter: "A", color: "#55779f" }
+    ];
+    var duskEvs = sunEvents(v0, v1, obs.lat, obs.lon);
+    var lastLx = -Infinity;
+    ctx.font = "10px " + FONT;
+    for (var de = 0; de < duskEvs.length; de++) {
+      var ev = duskEvs[de];
+      var spec = null;
+      for (var ds = 0; ds < duskSpecs.length; ds++) {
+        if (duskSpecs[ds].alt === ev.alt) spec = duskSpecs[ds];
+      }
+      var dx = X(ev.ms);
+      if (dx - lastLx < 13) continue; // keep the letters readable when events crowd
+      lastLx = dx;
+      ctx.fillStyle = spec.color;
+      ctx.textAlign = "center";
+      ctx.fillText(spec.letter, dx, plot.y + plot.h + 31);
+      var axx = dx + 6, ayy = plot.y + plot.h + 24;
+      ctx.strokeStyle = spec.color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(axx, ev.dir > 0 ? ayy + 7 : ayy);
+      ctx.lineTo(axx, ev.dir > 0 ? ayy : ayy + 7);
+      ctx.stroke();
+      ctx.beginPath();
+      if (ev.dir > 0) {
+        ctx.moveTo(axx - 2.5, ayy + 3); ctx.lineTo(axx, ayy); ctx.lineTo(axx + 2.5, ayy + 3);
+      } else {
+        ctx.moveTo(axx - 2.5, ayy + 4); ctx.lineTo(axx, ayy + 7); ctx.lineTo(axx + 2.5, ayy + 4);
+      }
+      ctx.stroke();
     }
   }
 
@@ -2533,6 +2606,11 @@ $("civil-chk").addEventListener("change", function () {
 });
 $("nautical-chk").addEventListener("change", function () {
   state.options.nautical = this.checked;
+  saveState();
+  scheduleRedraw();
+});
+$("dusk-chk").addEventListener("change", function () {
+  state.options.dusk = this.checked;
   saveState();
   scheduleRedraw();
 });
