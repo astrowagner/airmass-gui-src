@@ -3190,7 +3190,7 @@ function updateTooltip(e) {
     var q = parallacticAngle(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
     var line = name + ":  alt " + hd.alt.toFixed(1) + "\u00b0  az " + hd.az.toFixed(1) +
                "\u00b0  X " + airmass(hd.alt).toFixed(2) +
-               "  q " + (isFinite(q) ? q.toFixed(1) + "\u00b0" : "\u2014");
+               "  PA " + (isFinite(q) ? q.toFixed(1) + "\u00b0" : "\u2014");
     if (moon) {
       line += "  moon " + angularSep(tt.raDeg / 15, tt.dec, moon.raH, moon.dec).toFixed(1) + "\u00b0";
     }
