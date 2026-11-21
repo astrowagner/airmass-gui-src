@@ -145,6 +145,13 @@ input[type="checkbox"] { flex: none; }
 #summary-panel .sum-day { display: block; margin-left: 1rem; color: var(--fg-dim);
                           font: 0.78rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 #summary-panel .sum-empty { color: var(--fg-dim); font-size: 0.8rem; }
+#calendar-panel .cal-target { margin: 0.35rem 0; font-size: 0.82rem; }
+#calendar-panel .cal-target b { color: var(--fg); }
+#calendar .cal-table { border-collapse: collapse; margin-left: 0.5rem; font-size: 0.78rem; }
+#calendar .cal-table th, #calendar .cal-table td { padding: 0.08rem 0.6rem 0.08rem 0;
+                                                   text-align: right; }
+#calendar .cal-table th { color: var(--fg-dim); font-weight: normal; }
+#calendar .cal-empty { color: var(--fg-dim); font-size: 0.8rem; }
 canvas { display: block; width: 100%; }
 #tooltip { position: absolute; display: none; pointer-events: none; z-index: 10;
            background: var(--bg-alt); border: 1px solid var(--border);
@@ -190,6 +197,7 @@ footer li { margin-bottom: 0.2rem; }
     <label class="field"><span>Civil twilight</span><input id="civil-chk" type="checkbox"></label>
     <label class="field"><span>Nautical twilight</span><input id="nautical-chk" type="checkbox"></label>
     <label class="field"><span>Dawn/dusk ticks</span><input id="dusk-chk" type="checkbox" checked></label>
+    <label class="field"><span>Annual calendar</span><input id="calendar-chk" type="checkbox" checked></label>
   </div>
   <div class="panel">
     <h2>Targets</h2>
@@ -233,6 +241,10 @@ footer li { margin-bottom: 0.2rem; }
     <div class="actions">
       <button id="csv-btn" title="Download the observing windows as CSV">Windows CSV</button>
     </div>
+  </div>
+  <div class="panel" id="calendar-panel">
+    <h2>Annual calendar</h2>
+    <div id="calendar"></div>
   </div>
 </main>
 </div>
@@ -1283,6 +1295,7 @@ function normalizeState(s) {
     civil: false,
     nautical: false,
     dusk: true,
+    calendar: true,
   };
   if (s.options) {
     for (var k in opts) { if (s.options[k] != null) opts[k] = s.options[k]; }
@@ -1527,6 +1540,7 @@ function syncAllControls() {
   $("civil-chk").checked = !!state.options.civil;
   $("nautical-chk").checked = !!state.options.nautical;
   $("dusk-chk").checked = !!state.options.dusk;
+  $("calendar-chk").checked = !!state.options.calendar;
   $("summary-panel").style.display = state.options.windows ? "" : "none";
   renderTargets();
 }
@@ -1948,6 +1962,139 @@ function renderSummary() {
 }
 
 /**
+ * Twelve monthly observing summaries for one target, on a 1-hour grid.
+ *
+ * Samples the target's altitude once per hour (UTC) starting at local
+ * midnight on the first day of the month containing monthStartMs,
+ * through the next eleven months (a full year of samples). For each
+ * month it reports the maximum
+ * altitude, the minimum airmass while above the horizon, and the number
+ * of sample hours with airmass at or below the threshold.
+ *
+ * @param {number} raDeg - ICRS J2000 RA in degrees.
+ * @param {number} dec - ICRS J2000 Dec in degrees.
+ * @param {string} tz - IANA time zone name.
+ * @param {number} lat - Observatory latitude in degrees.
+ * @param {number} lon - Observatory longitude in degrees.
+ * @param {number} monthStartMs - Epoch ms of local midnight on the
+ *     first day of the first month.
+ * @param {number} threshold - Max airmass X for a "usable" hour.
+ * @returns {Array} 12 entries, first the month of monthStartMs, each
+ *     {label ("Mon YYYY"), maxAlt (degrees; -Infinity when the target
+ *     never rises), minAir (airmass; Infinity when it never rises),
+ *     hours (float, count of sample hours with X <= threshold)}.
+ */
+function annualCalendarMonths(raDeg, dec, tz, lat, lon, monthStartMs, threshold) {
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var p0 = tzParts(tz, monthStartMs);
+  var months = [], first = [], k, ms, p, b;
+  for (b = 0; b < 12; b++) {
+    months.push({ label: "", maxAlt: -Infinity, minAir: Infinity, hours: 0 });
+  }
+  for (k = 0; k < 8784; k++) {
+    ms = monthStartMs + k * 3600000;
+    p = tzParts(tz, ms);
+    b = (p.year * 12 + p.month) - (p0.year * 12 + p0.month);
+    if (b < 0 || b > 11) continue;
+    var jd = jdFromUtcMs(ms);
+    var tt = precessIcrsToTete(raDeg, dec, jd);
+    var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, lat, lon);
+    if (first[b] === undefined) {
+      first[b] = true;
+      months[b].label = MONTHS[p.month - 1] + " " + p.year;
+    }
+    if (hd.alt > months[b].maxAlt) months[b].maxAlt = hd.alt;
+    if (hd.alt <= 0) continue;
+    var x = airmass(hd.alt);
+    if (x < months[b].minAir) months[b].minAir = x;
+    if (x <= threshold) months[b].hours += 1;
+  }
+  return months;
+}
+
+var __calCache = { key: null, data: null };
+
+/**
+ * Compute the annual calendar data for the calendar panel, memoized.
+ *
+ * Covers the twelve months starting with the month that contains the
+ * range start (local time), sampling once per hour; the year-long
+ * sampling is cached and only re-run when the observatory, range start,
+ * threshold, or target list changes.
+ *
+ * @returns {?Object} null when the time range is unparseable; otherwise
+ *     {threshold (max airmass), targets ([{name, months (12 entries per
+ *     annualCalendarMonths)}])}.
+ */
+function calendarData() {
+  var startMs = startUtcMs();
+  if (startMs == null) return null;
+  var obs = state.observatory;
+  var tz = resolveTz(obs.timezone);
+  var key = JSON.stringify([
+    obs.lat, obs.lon, tz, state.options.threshold, state.time_range.start,
+    state.objects.map(function (obj) { return [obj.ra, obj.dec]; }),
+  ]);
+  if (__calCache.key === key) return __calCache.data;
+  var p0 = tzParts(tz, startMs);
+  var monthStart = wallToUtc(tz, p0.year, p0.month, 1, 0, 0, 0);
+  var targets = [];
+  state.objects.forEach(function (obj, oi) {
+    var raH, dec;
+    try {
+      raH = parseRa(obj.ra);
+      dec = parseDec(obj.dec);
+    } catch (e) { return; }
+    targets.push({
+      name: obj.name || "Target " + (oi + 1),
+      months: annualCalendarMonths(raH * 15, dec, tz, obs.lat, obs.lon,
+                                   monthStart, state.options.threshold),
+    });
+  });
+  var data = { threshold: state.options.threshold, targets: targets };
+  __calCache.key = key;
+  __calCache.data = data;
+  return data;
+}
+
+/**
+ * Render the annual calendar panel: a 12-month table per target.
+ */
+function renderCalendar() {
+  var box = $("calendar");
+  if (!state.options.calendar) {
+    $("calendar-panel").style.display = "none";
+    return;
+  }
+  var data = calendarData();
+  if (!data) {
+    box.innerHTML = "";
+    $("calendar-panel").style.display = "none";
+    return;
+  }
+  var html = "";
+  if (data.targets.length === 0) {
+    html = '<div class="cal-empty">Add a target to see its annual coverage.</div>';
+  }
+  data.targets.forEach(function (t) {
+    html += '<div class="cal-target"><b>' + htmlEscape(t.name) + "</b>";
+    html += '<table class="cal-table"><tr><th>Month</th><th>Max alt</th>' +
+            "<th>Min X</th><th>Usable h</th></tr>";
+    t.months.forEach(function (m) {
+      html += "<tr><td>" + m.label + "</td><td>" +
+        (isFinite(m.maxAlt) ? m.maxAlt.toFixed(1) + "\u00b0" : "\u2014") +
+        "</td><td>" +
+        (isFinite(m.minAir) ? m.minAir.toFixed(2) : "\u2014") +
+        "</td><td>" + m.hours.toFixed(1) + "</td></tr>";
+    });
+    html += "</table></div>";
+  });
+  box.innerHTML = html;
+  $("calendar-panel").style.display = "";
+}
+
+/**
  * Build the observing-window CSV for download.
  *
  * One row per window: date, target, start, end (local HH:MM),
@@ -2361,6 +2508,7 @@ function draw() {
   }
 
   renderSummary();
+  renderCalendar();
 }
 
 // --------------------------------------------------------- view interaction
@@ -2763,6 +2911,11 @@ $("nautical-chk").addEventListener("change", function () {
 });
 $("dusk-chk").addEventListener("change", function () {
   state.options.dusk = this.checked;
+  saveState();
+  scheduleRedraw();
+});
+$("calendar-chk").addEventListener("change", function () {
+  state.options.calendar = this.checked;
   saveState();
   scheduleRedraw();
 });
