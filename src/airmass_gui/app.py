@@ -97,6 +97,14 @@ class App:
     startup and auto-saved on every change.
     """
     def __init__(self, root: tk.Tk | None = None):
+        """Build the control panel, load the workspace, and arm the first redraw.
+
+        Parameters
+        ----------
+        root : tkinter.Tk, optional
+            Existing root window to build into; a new one is created when
+            None (the default).
+        """
         self.root = root or tk.Tk()
         self.root.title(f"Airmass Charts {__version__}")
         self.root.geometry("1280x780")
@@ -204,7 +212,13 @@ class App:
         entry.bind("<Return>", handler)
 
     def _build_observatory(self, parent):
-        """Build the observatory panel: preset combobox and the latitude, longitude, elevation, and time-zone entries."""
+        """Build the observatory panel: preset combobox and the latitude, longitude, elevation, and time-zone entries.
+
+    Parameters
+    ----------
+    parent : tkinter.Widget
+        Frame to build the panel into.
+        """
         frame = ttk.LabelFrame(parent, text="Observatory", padding=6)
         frame.pack(fill="x", pady=(0, 6))
 
@@ -224,7 +238,13 @@ class App:
         self._entry_row(frame, "Time zone:", self.tz_var, self._on_obs_field_edit)
 
     def _build_time_range(self, parent):
-        """Build the time-range panel: local start stamp and duration in days."""
+        """Build the time-range panel: local start stamp and duration in days.
+
+    Parameters
+    ----------
+    parent : tkinter.Widget
+        Frame to build the panel into.
+        """
         frame = ttk.LabelFrame(parent, text="Time range (local)", padding=6)
         frame.pack(fill="x", pady=(0, 6))
         self.start_var = tk.StringVar()
@@ -239,7 +259,13 @@ class App:
         spin.bind("<Return>", self._on_change)
 
     def _build_targets(self, parent):
-        """Build the targets panel: object listbox, RA/Dec entries, add/update/remove buttons, and the Simbad lookup row."""
+        """Build the targets panel: object listbox, RA/Dec entries, add/update/remove buttons, and the Simbad lookup row.
+
+    Parameters
+    ----------
+    parent : tkinter.Widget
+        Frame to build the panel into.
+        """
         frame = ttk.LabelFrame(parent, text="Targets", padding=6)
         frame.pack(fill="x")
 
@@ -329,7 +355,13 @@ class App:
     # ------------------------------------------------------------- handlers
 
     def _on_obs_select(self, _event=None):
-        """Fill the observatory fields when a preset is chosen from the combobox."""
+        """Fill the observatory fields when a preset is chosen from the combobox.
+
+    Parameters
+    ----------
+    _event : tkinter.Event, optional
+        Callback event from the widget binding; not used.
+        """
         name = self.obs_var.get()
         if name in PRESETS:
             obs = PRESETS[name]
@@ -340,7 +372,13 @@ class App:
         self._on_change()
 
     def _on_obs_field_edit(self, _event=None):
-        """Mark the observatory Custom when an entry drifts from the selected preset."""
+        """Mark the observatory Custom when an entry drifts from the selected preset.
+
+    Parameters
+    ----------
+    _event : tkinter.Event, optional
+        Callback event from the widget binding; not used.
+        """
         name = self.obs_var.get()
         if name in PRESETS:
             obs = PRESETS[name]
@@ -358,7 +396,13 @@ class App:
         self._on_change()
 
     def _on_change(self, _event=None):
-        """Commit the observatory and time-range fields, save, and schedule a redraw."""
+        """Commit the observatory and time-range fields, save, and schedule a redraw.
+
+    Parameters
+    ----------
+    _event : tkinter.Event, optional
+        Callback event from the widget binding; not used.
+        """
         self._commit_observatory()
         self._commit_time_range()
         self._save()
@@ -395,7 +439,13 @@ class App:
             pass
 
     def _on_select_object(self, _event=None):
-        """Load the selected listbox object into the RA/Dec entries."""
+        """Load the selected listbox object into the RA/Dec entries.
+
+    Parameters
+    ----------
+    _event : tkinter.Event, optional
+        Callback event from the widget binding; not used.
+        """
         sel = self.obj_list.curselection()
         if not sel:
             return
@@ -486,7 +536,13 @@ class App:
     # -------------------------------------------------------------- simbad
 
     def _lookup(self, _event=None):
-        """Start a background Simbad lookup for the name in the lookup entry."""
+        """Start a background Simbad lookup for the name in the lookup entry.
+
+    Parameters
+    ----------
+    _event : tkinter.Event, optional
+        Callback event from the widget binding; not used.
+        """
         name = self.lookup_var.get().strip()
         if not name:
             self.status_var.set("Type a target name to look up (e.g., Vega)")
@@ -549,7 +605,13 @@ class App:
         self._redraw_job = self.root.after(150, self._redraw)
 
     def _redraw(self, *_):
-        """Rebuild the chart canvas and navigation toolbar from the workspace."""
+        """Rebuild the chart canvas and navigation toolbar from the workspace.
+
+    Parameters
+    ----------
+    *_
+        Callback arguments (a scheduled after() job or event); not used.
+        """
         self._redraw_job = None
         for child in self.canvas_holder.winfo_children():
             child.destroy()
@@ -572,7 +634,13 @@ class App:
     # -------------------------------------------------------- workspace
 
     def _save(self, *_):
-        """Save the workspace to disk, reporting failures in the status bar."""
+        """Save the workspace to disk, reporting failures in the status bar.
+
+    Parameters
+    ----------
+    *_
+        Callback arguments (a scheduled after() job or event); not used.
+        """
         try:
             save(self.workspace_path, self.data)
         except Exception as exc:

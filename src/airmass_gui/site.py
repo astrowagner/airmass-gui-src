@@ -1403,7 +1403,10 @@ function decodeShareFragment(hash) {
  * coverage.
  *
  * @param {{ra?: string, dec?: string, ephemeris?: ?Array}} obj - Target
- *     record.
+ *     record: ra and dec are J2000 coordinates in the usual string form
+ *     (h:m:s or decimal degrees for ra, d:m:s or decimal for dec), and
+ *     ephemeris is the Horizons rows [ms, raDeg, decDeg]. At least one of
+ *     ra/dec or ephemeris must be present.
  * @param {number} ms - Epoch ms.
  * @returns {{raDeg: number, dec: number}} J2000 coordinates; raDeg in
  *     degrees, 0-360.
@@ -3144,7 +3147,8 @@ function canvasPos(e) {
  * Lists the local time, then per target the altitude, azimuth, airmass,
  * parallactic angle, and (with the moon curve on) the Moon separation.
  *
- * @param {MouseEvent|{clientX: number, clientY: number}} e
+ * @param {MouseEvent|{clientX: number, clientY: number}} e - Pointer
+ *     event; client coordinates position the hover.
  */
 function updateTooltip(e) {
   var plot = lastPlot;
@@ -3291,9 +3295,9 @@ canvas.addEventListener("dblclick", function () {
 
 var touchState = null;
 /**
- * Distance between the two touches of a gesture.
+ * Compute the distance between the two touches of a pinch gesture.
  *
- * @param {TouchEvent} e
+ * @param {TouchEvent} e - The two-finger touch event.
  * @returns {number} Distance in CSS px.
  */
 function touchDist(e) {
