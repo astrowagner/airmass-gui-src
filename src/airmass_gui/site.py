@@ -2142,22 +2142,22 @@ $("ws-save-btn").addEventListener("click", function () {
   writeWorkspaces(ws);
   refreshWsSelect();
   $("ws-select").value = name;
-  setStatus("Saved \\u201c" + name + "\\u201d");
+  setStatus("Saved \u201c" + name + "\u201d");
 });
 $("ws-load-btn").addEventListener("click", function () {
   var name = $("ws-select").value;
   if (!name) { setStatus("No workspace selected"); return; }
-  loadWorkspaceDoc(readWorkspaces()[name], "\\u201c" + name + "\\u201d");
+  loadWorkspaceDoc(readWorkspaces()[name], "\u201c" + name + "\u201d");
 });
 $("ws-delete-btn").addEventListener("click", function () {
   var name = $("ws-select").value;
   if (!name) { setStatus("No workspace selected"); return; }
-  if (!window.confirm("Delete workspace \\u201c" + name + "\\u201d?")) return;
+  if (!window.confirm("Delete workspace \u201c" + name + "\u201d?")) return;
   var ws = readWorkspaces();
   delete ws[name];
   writeWorkspaces(ws);
   refreshWsSelect();
-  setStatus("Deleted \\u201c" + name + "\\u201d");
+  setStatus("Deleted \u201c" + name + "\u201d");
 });
 $("import-btn").addEventListener("click", function () { $("import-file").click(); });
 $("import-file").addEventListener("change", function () {
@@ -2168,10 +2168,10 @@ $("import-file").addEventListener("change", function () {
   reader.onload = function () {
     var s;
     try { s = JSON.parse(String(reader.result)); }
-    catch (e) { setStatus("Could not parse \\u201c" + file.name + "\\u201d as JSON"); return; }
-    loadWorkspaceDoc(s, "\\u201c" + file.name + "\\u201d");
+    catch (e) { setStatus("Could not parse \u201c" + file.name + "\u201d as JSON"); return; }
+    loadWorkspaceDoc(s, "\u201c" + file.name + "\u201d");
   };
-  reader.onerror = function () { setStatus("Could not read \\u201c" + file.name + "\\u201d"); };
+  reader.onerror = function () { setStatus("Could not read \u201c" + file.name + "\u201d"); };
   reader.readAsText(file);
 });
 $("png-btn").addEventListener("click", function () {
