@@ -53,6 +53,19 @@ the chart re-rendering live. Edits persist in the browser (localStorage) until
 you click **Reset**; **Export JSON** downloads the workspace as a JSON file the
 desktop app can open (`File -> Open...`).
 
+**Copy link** shares the exact setup through the URL's `#w=` fragment; the
+Workspace panel also keeps named workspaces in the browser (**Import JSON**
+loads one back) and **PNG** downloads the current chart. The **Windows**
+option adds an airmass threshold line, per-target usable-window bands,
+transit ticks on the time axis, and a per-night summary panel; **Moon**
+overlays the Moon's airmass (truncated NAO 1954/ELP theory, ~0.015 deg from
+the full ephemeris) with illumination and per-target moon separation in the
+hover tooltip; **Civil** / **Nautical twilight** mark the sun's -6 and -12
+degree crossings as thin vertical lines. The chart is navigable by wheel and
+drag or by touch (one finger pans, two fingers pinch to zoom, tap shows the
+tooltip); keyboard shortcuts: arrow keys pan, `+` / `-` zoom around the
+center, `0` or `r` resets the window.
+
 The astronomy (sun position, precession, airmass) is computed in embedded
 JavaScript: entered ICRS coordinates are precessed to the mean equator/equinox
 of date (IAU 2006; nutation omitted) before altitudes are computed, so curves
