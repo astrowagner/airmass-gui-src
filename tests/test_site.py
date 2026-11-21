@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 import html as html_mod
 from astropy import units as u
 from astropy.coordinates import AltAz, SkyCoord, TETE, get_sun
@@ -36,7 +38,7 @@ CORE_END = "/*JS-CORE-END*/"
 
 CORE_FUNCTIONS = [
     "wrap360", "d2r", "r2d", "jdFromUtcMs", "gmstMeeus", "lstDeg", "altitude",
-    "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
+    "horizonCoords", "parallacticAngle", "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
     "parseDec", "simbadParseRecord",
 ]
@@ -113,6 +115,14 @@ class SitePageTests(unittest.TestCase):
         self.assertIn(f"--bg: {chart.FIG_BG}", self.page)
         for color in (chart.AXES_BG, chart.FG, chart.FG_DIM, chart.BORDER, chart.ERROR_FG):
             self.assertIn(color, self.page)
+
+    def test_tooltip_and_view_navigation(self):
+        self.assertIn('<div id="tooltip">', self.page)
+        self.assertIn('<div id="xhair">', self.page)
+        self.assertIn("position: relative", self.page)
+        self.assertIn('"ew-resize"', self.page)
+        self.assertIn("dblclick", self.page)
+        self.assertIn("passive: false", self.page)
 
     def test_title_uses_observatory_name(self):
         name = html_mod.escape(self.data["observatory"]["name"])
@@ -232,6 +242,66 @@ class JsCoreNumericTests(unittest.TestCase):
                 f"altitude({tt['raDeg'] / 15}, {tt['dec']}, {t.jd}, {LBT.lat}, {LBT.lon})"
             )
             self.assertAlmostEqual(got, expected, delta=0.05, msg=iso)
+
+    def test_horizon_coords(self):
+        # Same pattern as test_altitude: feed true equator-of-date
+        # coordinates and compare against astropy's refraction-free
+        # AltAz to ~0.01 deg (azimuth to ~0.02 deg: the TETE-vs-mean
+        # equinox nutation offset is amplified by 1/sin(alt) in azimuth).
+        # Azimuth is clockwise from north.
+        for iso in ("2026-11-20 22:00:00", "2026-11-20 08:30:00"):
+            t = Time(iso)
+            frame = AltAz(obstime=t, location=astro.location(LBT))
+            ref = VEGA.transform_to(frame)
+            tete = VEGA.transform_to(TETE(obstime=t))
+            got = json.loads(
+                self._js(
+                    f"JSON.stringify(horizonCoords({tete.ra.to_value(u.hourangle)}, {tete.dec.deg}, {t.jd}, {LBT.lat}, {LBT.lon}))"
+                )
+            )
+            self.assertAlmostEqual(got["alt"], ref.alt.deg, delta=0.01, msg=iso)
+            daz = abs(got["az"] - ref.az.deg) % 360.0
+            self.assertLessEqual(min(daz, 360.0 - daz), 0.02, msg=iso)
+
+    def test_parallactic_angle(self):
+        # Reference: angle at the object between the vertical circle and
+        # the hour circle, from ENU unit vectors. The hour angle is taken
+        # from the core's own lstDeg so LST precision cannot pollute the
+        # comparison (LST accuracy is covered by test_gmst).
+        rng = random.Random(42)
+        checked = 0
+        for _ in range(40):
+            jd = rng.uniform(2451545.0, 2490000.0)
+            lat = rng.uniform(-60.0, 60.0)
+            lon = rng.uniform(-180.0, 180.0)
+            dec = rng.uniform(-85.0, 85.0)
+            if abs(dec - lat) < 3.0:
+                continue  # near zenith: the angle is ill-conditioned
+            ra_h = rng.uniform(0.0, 24.0)
+            H = math.radians((self._js(f"lstDeg({jd}, {lon})") - ra_h * 15.0) % 360.0)
+            phi = math.radians(lat)
+            dec_r = math.radians(dec)
+            cd, sd = math.cos(dec_r), math.sin(dec_r)
+            sp, cp = math.sin(phi), math.cos(phi)
+            ch, sh = math.cos(H), math.sin(H)
+            u = np.array([-cd * sh, sd * cp - cd * sp * ch, sd * sp + cd * cp * ch])
+            u /= np.linalg.norm(u)
+            z = np.array([0.0, 0.0, 1.0])
+            pole = np.array([0.0, cp, sp])
+            t_vert = z - np.dot(z, u) * u
+            t_vert /= np.linalg.norm(t_vert)
+            t_hour = pole - np.dot(pole, u) * u
+            t_hour /= np.linalg.norm(t_hour)
+            q_ref = math.degrees(
+                math.atan2(np.dot(u, np.cross(t_vert, t_hour)), np.dot(t_vert, t_hour))
+            )
+            got = self._js(f"parallacticAngle({ra_h}, {dec}, {jd}, {lat}, {lon})")
+            dq = abs(got - q_ref) % 360.0
+            self.assertLessEqual(
+                min(dq, 360.0 - dq), 1e-5, msg=(round(jd, 4), round(lat, 2), round(dec, 2))
+            )
+            checked += 1
+        self.assertGreaterEqual(checked, 30)
 
     def test_precess(self):
         # Nutation is omitted, so the residuals are nutation-level. RA is
