@@ -1,4 +1,8 @@
-"""Matplotlib rendering for airmass charts (backend-agnostic)."""
+"""Matplotlib rendering of airmass charts for the desktop app (backend-agnostic).
+
+The static PNG output shares its astronomy (airmass, sun shading) and its
+dark theme with the interactive site in airmass_gui.site.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -19,10 +23,10 @@ from .astro import (
 )
 from .observatories import from_dict
 
-# The altitude range defines the axis: 0 deg (horizon) at the bottom, 90 deg
-# (zenith, X = 1) at the top. Airmass values are placed on the left axis at
-# their true (nonlinear) altitudes, so the airmass axis is effectively
-# inverted: X = 1 at the top, growing toward the horizon.
+# Axis geometry. Altitude defines the vertical scale: 0 deg (horizon) at the
+# bottom, 90 deg (zenith, X = 1) at the top. Airmass values are placed on the
+# left axis at their true (nonlinear) altitudes, so the airmass axis is
+# effectively inverted: X = 1 at the top, growing toward the horizon.
 
 # Curve colors for targets (tab10); shared by the GUI and the static site.
 PALETTE = [
@@ -30,9 +34,12 @@ PALETTE = [
     "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
 ]
 
+# Altitude limits (deg) and tick values for the right axis.
 ALT_MIN = 0.0
 ALT_MAX = 90.0
 ALT_TICKS = [0.0, 15.0, 30.0, 45.0, 60.0, 75.0, 90.0]
+
+# Airmass tick values for the left axis.
 AIRMASS_TICKS = [1.0, 1.5, 2.0, 4.0, 8.0, 20.0]
 
 # Dark theme: shared by the GUI canvas and headless PNG output.
@@ -55,6 +62,18 @@ SHADE = {
 
 
 def _tz(name: str) -> ZoneInfo:
+    """Resolve an IANA time-zone name, falling back to UTC on bad input.
+
+    Parameters
+    ----------
+    name : str
+        IANA time-zone name.
+
+    Returns
+    -------
+    ZoneInfo
+        The zone, or ZoneInfo("UTC") if the name is not recognized.
+    """
     try:
         return ZoneInfo(name)
     except Exception:
@@ -62,10 +81,35 @@ def _tz(name: str) -> ZoneInfo:
 
 
 def _mjd_to_datetime(mjd: float) -> datetime:
+    """Convert Julian Date 2400000.0-based MJD to a naive UTC datetime.
+
+    Parameters
+    ----------
+    mjd : float
+        Modified Julian Date (2400000.5 = 1858-11-17).
+
+    Returns
+    -------
+    datetime
+        Naive UTC datetime.
+    """
     return datetime(1858, 11, 17) + timedelta(days=float(mjd))
 
 
 def _parse_range(data: dict):
+    """Extract the observatory and time range from a workspace document.
+
+    Parameters
+    ----------
+    data : dict
+        Workspace document.
+
+    Returns
+    -------
+    tuple of (Observatory, Time, Time, ZoneInfo)
+        The observatory, range start and end (UTC), and the observatory
+        time zone.
+    """
     obs = from_dict(data.get("observatory", {}))
     time_range = data.get("time_range", {})
     start_naive = datetime.fromisoformat(time_range.get("start", "1985-10-26 12:00"))
@@ -76,12 +120,34 @@ def _parse_range(data: dict):
 
 
 def _airmass_altitude(x):
-    """Airmass values -> their altitudes on the 0-90 axis (inf -> horizon)."""
+    """Map airmass values to the altitude axis; below-horizon (inf) -> horizon.
+
+    Parameters
+    ----------
+    x : array_like
+        Airmass values; inf marks below-horizon points.
+
+    Returns
+    -------
+    ndarray
+        Altitude in degrees for each value, clipped to the 0-90 axis.
+    """
     return altitude_from_airmass(np.where(np.isfinite(x), x, horizon_airmass()))
 
 
 def _setup_axes(ax):
-    """Left axis: airmass (inverted, X = 1 at top). Right axis: altitude 0-90 deg."""
+    """Set up the dual y axes: airmass (left, inverted) and altitude (right).
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The main axes.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The twin right axes carrying the altitude scale.
+    """
     ax.set_ylim(ALT_MIN, ALT_MAX)
     ax.set_yticks([float(_airmass_altitude(np.array([v]))[0]) for v in AIRMASS_TICKS])
     ax.set_yticklabels([f"{v:g}" for v in AIRMASS_TICKS])
@@ -95,7 +161,13 @@ def _setup_axes(ax):
 
 
 def _dark_axes(ax, alt_ax):
-    """Apply the dark theme to the chart axes."""
+    """Apply the dark theme (background, spines, ticks, labels) to the axes.
+
+    Parameters
+    ----------
+    ax, alt_ax : matplotlib.axes.Axes
+        The main and twin axes.
+    """
     ax.set_facecolor(AXES_BG)
     for spine in list(ax.spines.values()) + list(alt_ax.spines.values()):
         spine.set_color(BORDER)
@@ -106,7 +178,23 @@ def _dark_axes(ax, alt_ax):
     ax.title.set_color(FG)
 
 def render_figure(data: dict, out_path=None):
-    """Render (and optionally save) the airmass chart for a workspace dict; returns the Figure."""
+    """Render the airmass chart for a workspace document.
+
+    Draws twilight shading, one curve per target (Kasten & Young airmass on
+    the left axis, altitude on the right), the X = 2 reference line, and
+    per-target minimum labels.
+
+    Parameters
+    ----------
+    data : dict
+        Workspace document.
+    out_path : str or Path, optional
+        If given, the figure is also saved there as PNG (150 dpi).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
     obs, start, end, tz = _parse_range(data)
     fig, ax = plt.subplots(figsize=(10.5, 5.2), facecolor=FIG_BG)
 

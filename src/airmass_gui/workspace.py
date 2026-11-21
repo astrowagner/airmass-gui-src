@@ -1,4 +1,11 @@
-"""Workspace persistence (atomic JSON save/load)."""
+"""Workspace persistence: the JSON document exchanged between the desktop app,
+the generated site, and the user's filesystem.
+
+The workspace is a JSON object with keys version, created, modified,
+observatory, objects, and time_range. Objects are target entries
+(name, ra, dec, color, plus optional extra fields such as magnitude,
+spectral type, or an ephemeris).
+"""
 from __future__ import annotations
 
 import json
@@ -8,8 +15,10 @@ from pathlib import Path
 
 from .observatories import DEFAULT_PRESET, PRESETS, to_dict
 
+# Schema version; bumped when the on-disk format changes incompatibly.
 WORKSPACE_VERSION = 1
 
+# Seed target for a fresh workspace.
 DEFAULT_OBJECT = {
     "name": "Vega",
     "ra": "18:36:56.30142",
@@ -19,10 +28,27 @@ DEFAULT_OBJECT = {
 
 
 def default_path() -> Path:
+    """Path of the auto-saved workspace.
+
+    Returns
+    -------
+    Path
+        ~/.config/airmass-gui/workspace.json
+    """
     return Path.home() / ".config" / "airmass-gui" / "workspace.json"
 
 
 def new_workspace() -> dict:
+    """Create a fresh workspace document centered on the default preset.
+
+    The time range starts at today's local 12:00 and spans one day.
+
+    Returns
+    -------
+    dict
+        A complete workspace with version, created, modified, observatory,
+        objects, and time_range keys.
+    """
     now = datetime.now().replace(microsecond=0)
     return {
         "version": WORKSPACE_VERSION,
@@ -38,6 +64,28 @@ def new_workspace() -> dict:
 
 
 def load(path: Path) -> dict:
+    """Load a workspace document, merging it over the defaults.
+
+    Unknown keys in the file are dropped; known keys keep the file's value.
+    A missing or malformed objects entry becomes an empty list.
+
+    Parameters
+    ----------
+    path : Path
+        Path of the JSON file to read.
+
+    Returns
+    -------
+    dict
+        The merged workspace.
+
+    Raises
+    ------
+    ValueError
+        If the file does not contain a JSON object.
+    json.JSONDecodeError
+        If the file is not valid JSON.
+    """
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("workspace file must contain a JSON object")
@@ -49,6 +97,15 @@ def load(path: Path) -> dict:
 
 
 def save(path: Path, data: dict) -> None:
+    """Write a workspace atomically (temp file + rename), stamping modified.
+
+    Parameters
+    ----------
+    path : Path
+        Destination path; parent directories are created as needed.
+    data : dict
+        Workspace document to write.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = dict(data)

@@ -1,3 +1,5 @@
+"""Unit tests for airmass_gui.workspace (workspace JSON save/load)."""
+
 import json
 import tempfile
 import unittest
@@ -8,7 +10,9 @@ from airmass_gui.workspace import load, new_workspace, save
 
 
 class WorkspaceTest(unittest.TestCase):
+    """Save/load round-trips and default-filling."""
     def test_roundtrip(self):
+        """save then load preserves objects, observatory, and time_range."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace.json"
             ws = new_workspace()
@@ -21,6 +25,7 @@ class WorkspaceTest(unittest.TestCase):
             self.assertIn("modified", data)
 
     def test_load_partial(self):
+        """Missing keys in a saved file are filled with defaults."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "workspace.json"
             path.write_text(json.dumps({"version": 1, "objects": []}))
@@ -30,6 +35,7 @@ class WorkspaceTest(unittest.TestCase):
             self.assertIn("time_range", data)
 
     def test_save_creates_dirs_and_updates_modified(self):
+        """save creates parent directories, sets modified, leaves no .tmp."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "nested" / "dir" / "workspace.json"
             data = new_workspace()
@@ -39,6 +45,7 @@ class WorkspaceTest(unittest.TestCase):
             self.assertFalse(path.with_suffix(".tmp").exists())
 
     def test_default_object_is_vega(self):
+        """The default workspace is Vega at LBT."""
         ws = new_workspace()
         self.assertEqual(ws["objects"][0]["name"], "Vega")
         self.assertEqual(ws["observatory"]["name"], "LBT (Large Binocular Telescope)")

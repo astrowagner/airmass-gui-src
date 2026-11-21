@@ -1,4 +1,4 @@
-"""Observatory data and presets."""
+"""Observatory definitions: a geodetic site, IANA time zone, and named presets."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +6,23 @@ from dataclasses import dataclass
 
 @dataclass
 class Observatory:
+    """One observatory site: geodetic coordinates, altitude, and local time zone.
+
+    Attributes
+    ----------
+    name : str
+        Display name.
+    lat : float
+        Geodetic latitude in degrees (positive north).
+    lon : float
+        Geodetic longitude in degrees (positive east).
+    elevation_m : float
+        Altitude above mean sea level in meters.
+    timezone : str, default "UTC"
+        IANA time-zone name used for all local-time display (e.g.
+        "America/Phoenix").
+    """
+
     name: str
     lat: float
     lon: float
@@ -13,18 +30,17 @@ class Observatory:
     timezone: str = "UTC"
 
 
-LBT = Observatory(
-    "LBT (Large Binocular Telescope)",
-    lat=32.44278,
-    lon=-111.15500,
-    elevation_m=2400.0,
-    timezone="America/Phoenix",
-)
-
+# Named sites offered in the preset menu; keys are the display names.
 PRESETS: dict[str, Observatory] = {
     obs.name: obs
     for obs in [
-        LBT,
+        Observatory(
+            "LBT (Large Binocular Telescope)",
+            lat=32.44278,
+            lon=-111.15500,
+            elevation_m=2400.0,
+            timezone="America/Phoenix",
+        ),
         Observatory("Keck I/II (Mauna Kea)", 19.8263, -155.4744, 4145.0, "Pacific/Honolulu"),
         Observatory("Subaru (Mauna Kea)", 19.8257, -155.4746, 4146.0, "Pacific/Honolulu"),
         Observatory("Gemini North (Mauna Kea)", 19.8227, -155.4737, 2731.0, "Pacific/Honolulu"),
@@ -35,11 +51,26 @@ PRESETS: dict[str, Observatory] = {
     ]
 }
 
+# Preset used when no workspace exists yet.
 DEFAULT_PRESET = "LBT (Large Binocular Telescope)"
+
+# Sentinel for an observatory edited away from any preset.
 CUSTOM = "Custom"
 
 
 def from_dict(data: dict) -> Observatory:
+    """Build an Observatory from a workspace dict, filling missing keys with defaults.
+
+    Parameters
+    ----------
+    data : dict
+        Observatory fields (name, lat, lon, elevation_m, timezone); any key
+        may be absent.
+
+    Returns
+    -------
+    Observatory
+    """
     return Observatory(
         name=data.get("name", "Custom observatory"),
         lat=float(data.get("lat", 0.0)),
@@ -50,6 +81,17 @@ def from_dict(data: dict) -> Observatory:
 
 
 def to_dict(obs: Observatory) -> dict:
+    """Serialize an Observatory to a JSON-ready dict (no preset key).
+
+    Parameters
+    ----------
+    obs : Observatory
+
+    Returns
+    -------
+    dict
+        name, lat, lon, elevation_m, timezone.
+    """
     return {
         "name": obs.name,
         "lat": obs.lat,

@@ -54,12 +54,13 @@ DEC_BAD = ["", "abc", "91", "-95", "30:70", "1 2 3 4"]
 
 
 def _extract_core(page: str) -> str:
+    """Return the JS text between the JS-CORE markers."""
     begin = page.index(CORE_BEGIN) + len(CORE_BEGIN)
     return page[begin : page.index(CORE_END)]
 
 
 def _strip_js_comments(code: str) -> str:
-    # The core has no block comments and no "//" inside string/regex literals.
+    """Remove // line comments; the core has no block comments or // in literals."""
     return re.sub(r"//[^\n]*", "", code)
 
 
@@ -110,17 +111,20 @@ class SitePageTests(unittest.TestCase):
         cls.dir.cleanup()
 
     def test_writes_single_file(self):
+        """build_site emits exactly one index.html, > 10 kB."""
         self.assertTrue(self.path.is_file())
         self.assertGreater(self.path.stat().st_size, 10_000)
         self.assertEqual([p.name for p in Path(self.dir.name).iterdir()], ["index.html"])
 
     def test_canvas_and_dark_theme(self):
+        """The chart canvas and dark-theme CSS variables are present."""
         self.assertIn('<canvas id="chart">', self.page)
         self.assertIn(f"--bg: {chart.FIG_BG}", self.page)
         for color in (chart.AXES_BG, chart.FG, chart.FG_DIM, chart.BORDER, chart.ERROR_FG):
             self.assertIn(color, self.page)
 
     def test_tooltip_and_view_navigation(self):
+        """Tooltip, crosshair, resize handle, and dblclick wiring are present."""
         self.assertIn('<div id="tooltip">', self.page)
         self.assertIn('<div id="xhair">', self.page)
         self.assertIn("position: relative", self.page)
@@ -129,40 +133,47 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("passive: false", self.page)
 
     def test_workspace_controls(self):
+        """Workspace select, file import, and PNG/share buttons are present."""
         for token in ('id="ws-select"', 'id="import-file"', 'id="png-btn"',
                       'id="copylink-btn"', 'accept=".json,application/json"'):
             self.assertIn(token, self.page)
         self.assertIn("function htmlEscape(", self.core)
 
     def test_windows_ui(self):
+        """Windows checkbox, threshold input, and summary div are present."""
         self.assertIn('<input id="windows-chk"', self.page)
         self.assertIn('<input id="threshold"', self.page)
         self.assertIn('<div id="summary">', self.page)
         self.assertIn("function renderSummary()", self.page)
 
     def test_moon_ui(self):
+        """Moon checkbox and the three moon core functions are present."""
         self.assertIn('<input id="moon-chk"', self.page)
         self.assertIn("function moonRaDec(", self.core)
         self.assertIn("function moonPhase(", self.core)
         self.assertIn("function angularSep(", self.core)
 
     def test_twilight_lines_and_gestures_ui(self):
+        """Civil/nautical checkboxes, touch, and key handlers are present."""
         self.assertIn('<input id="civil-chk"', self.page)
         self.assertIn('<input id="nautical-chk"', self.page)
         self.assertIn('"touchstart"', self.page)
         self.assertIn('"keydown"', self.page)
 
     def test_shareable_url(self):
+        """Share button and the encode/decode core functions are present."""
         self.assertIn('<button id="copylink-btn"', self.page)
         self.assertIn("function encodeShareFragment(", self.core)
         self.assertIn("function decodeShareFragment(", self.core)
         self.assertIn("history.replaceState", self.page)
 
     def test_title_uses_observatory_name(self):
+        """The page title carries the observatory name."""
         name = html_mod.escape(self.data["observatory"]["name"])
         self.assertIn(f"<title>Airmass chart &mdash; {name}</title>", self.page)
 
     def test_no_external_asset_references(self):
+        """No external scripts, styles, fonts, or images are referenced."""
         # The page must be self-contained: no external assets may be loaded.
         # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
         # send Access-Control-Allow-Origin: *, so nothing is embedded.)
@@ -171,9 +182,11 @@ class SitePageTests(unittest.TestCase):
             self.assertNotIn(token, self.page)
 
     def test_no_unreplaced_tokens(self):
+        """No unfilled __TOKEN__ placeholders remain."""
         self.assertIsNone(re.search(r"__[A-Z_]+__", self.page))
 
     def test_embedded_data_round_trips(self):
+        """INITIAL, OBSERVATORIES, and PALETTE round-trip as embedded JSON."""
         self.assertEqual(_embedded_json(self.page, "INITIAL"), self.data)
         self.assertEqual(
             _embedded_json(self.page, "OBSERVATORIES"),
@@ -182,25 +195,30 @@ class SitePageTests(unittest.TestCase):
         self.assertEqual(_embedded_json(self.page, "PALETTE"), chart.PALETTE)
 
     def test_embedded_shade_colors(self):
+        """SHADE maps each level to a 6-digit hex color."""
         shade = _embedded_json(self.page, "SHADE")
         self.assertEqual(set(shade), set(chart.SHADE))
         for color in shade.values():
             self.assertRegex(color, r"^#[0-9a-f]{6}$")
 
     def test_js_core_markers(self):
+        """The JS-CORE BEGIN/END markers are present."""
         self.assertIn(CORE_BEGIN, self.page)
         self.assertIn(CORE_END, self.page)
 
     def test_js_core_is_pure(self):
+        """The core references no DOM, storage, Intl, or window."""
         core = _strip_js_comments(self.core)
         for token in ("document", "localStorage", "new Intl", "window"):
             self.assertNotIn(token, core)
 
     def test_js_core_functions_present(self):
+        """Every function in CORE_FUNCTIONS is defined in the core."""
         for name in CORE_FUNCTIONS:
             self.assertRegex(self.core, rf"function {name}\(")
 
     def test_script_injection_is_neutralized(self):
+        """A hostile object name cannot open a second script tag."""
         data = new_workspace()
         data["objects"][0]["name"] = "</script><img src=x onerror=alert(1)>"
         with tempfile.TemporaryDirectory() as scratch:
@@ -231,6 +249,7 @@ class JsCoreNumericTests(unittest.TestCase):
         return self.js.evaljs(expr)
 
     def test_gmst(self):
+        """gmstMeeus agrees with astropy mean GMST to 0.01 deg."""
         for jd in (2440587.5, 2451545.0, 2460234.5, 2488575.0):
             expected = (
                 Time(jd, format="jd")
@@ -244,6 +263,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertLessEqual(min(diff, 360.0 - diff), 0.01)
 
     def test_altitude(self):
+        """altitude matches astropy AltAz: pure geometry to 0.01 deg, end-to-end to 0.05 deg."""
         # (a) Pure geometry: feeding altitude() true-equator-of-date
         # coordinates must match astropy's refraction-free AltAz to ~0.01 deg.
         t = Time("2026-11-20 22:00:00")
@@ -278,6 +298,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertAlmostEqual(got, expected, delta=0.05, msg=iso)
 
     def test_horizon_coords(self):
+        """horizonCoords matches astropy AltAz: alt to 0.01 deg, az to 0.02 deg."""
         # Same pattern as test_altitude: feed true equator-of-date
         # coordinates and compare against astropy's refraction-free
         # AltAz to ~0.01 deg (azimuth to ~0.02 deg: the TETE-vs-mean
@@ -298,6 +319,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertLessEqual(min(daz, 360.0 - daz), 0.02, msg=iso)
 
     def test_parallactic_angle(self):
+        """parallacticAngle matches the ENU vector definition to 1e-5 deg."""
         # Reference: angle at the object between the vertical circle and
         # the hour circle, from ENU unit vectors. The hour angle is taken
         # from the core's own lstDeg so LST precision cannot pollute the
@@ -338,6 +360,7 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertGreaterEqual(checked, 30)
 
     def test_precess(self):
+        """precessIcrsToTete matches astropy TETE at nutation level (~0.02 deg)."""
         # Nutation is omitted, so the residuals are nutation-level. RA is
         # ill-conditioned near the pole (1/cos dec amplification), so compare
         # great-circle distance and dec, and RA only away from the pole.
@@ -375,12 +398,14 @@ class JsCoreNumericTests(unittest.TestCase):
                     self.assertLessEqual(min(dra, 360.0 - dra), 0.02, ctx)
 
     def test_airmass(self):
+        """airmass agrees with astro.airmass_from_altitude to 1e-12."""
         for alt in (0.5, 10.0, 30.0, 45.0, 60.0, 89.9, 90.0):
             got = self._js(f"airmass({alt})")
             expected = float(astro.airmass_from_altitude(alt)[0])
             self.assertTrue(math.isclose(got, expected, rel_tol=1e-12), (alt, got, expected))
 
     def test_horizon_and_inverse(self):
+        """horizonX and altFromAirmass agree with the Python functions to 1e-6."""
         self.assertAlmostEqual(self._js("horizonX()"), astro.horizon_airmass(), delta=1e-9)
         for x in (1.0, 1.2, 2.0, 5.0, 10.0, 30.0, 37.9):
             got = self._js(f"altFromAirmass({x})")
@@ -388,6 +413,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertAlmostEqual(got, expected, delta=1e-6)
 
     def test_sun_ra_dec(self):
+        """sunRaDec matches astropy get_sun to 0.5 deg RA, 0.15 deg dec."""
         for iso in ("2026-11-20 21:00:00", "2027-06-21 03:00:00"):
             t = Time(iso)
             sun = get_sun(t)
@@ -397,6 +423,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertLessEqual(abs(got["dec"] - sun.dec.deg), 0.15)
 
     def test_sun_shading(self):
+        """sunShading boundaries match astro.sun_shading_intervals to 120 s."""
         start = Time("2026-11-20 00:00:00")
         end = Time("2026-11-21 00:00:00")
         expected = astro.sun_shading_intervals(LBT, start, end)
@@ -412,6 +439,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertAlmostEqual(g_b, (p_b - 40587.0) * 86400000.0, delta=120000.0)
 
     def test_parse_ra(self):
+        """parseRa agrees with astro.parse_ra on good and bad strings."""
         for text in RA_OK:
             got = self._js(f"parseRa({json.dumps(text)})")
             self.assertAlmostEqual(got, astro.parse_ra(text), delta=1e-9)
@@ -422,6 +450,7 @@ class JsCoreNumericTests(unittest.TestCase):
                 self._js(f"parseRa({json.dumps(text)})")
 
     def test_parse_dec(self):
+        """parseDec agrees with astro.parse_dec on good and bad strings."""
         for text in DEC_OK:
             got = self._js(f"parseDec({json.dumps(text)})")
             self.assertAlmostEqual(got, astro.parse_dec(text), delta=1e-9)
@@ -432,6 +461,7 @@ class JsCoreNumericTests(unittest.TestCase):
                 self._js(f"parseDec({json.dumps(text)})")
 
     def test_simbad_parse(self):
+        """simbadParseRecord agrees with lookup._parse_ascii_record on a real record."""
         # The page's parser must agree with the desktop app's on a real record.
         fixture = (Path(__file__).parent / "fixtures" / "simbad_vega.txt").read_text(encoding="utf-8")
         expected = lookup._parse_ascii_record(fixture)
@@ -445,6 +475,7 @@ class JsCoreNumericTests(unittest.TestCase):
 
 
     def test_share_fragment_round_trip(self):
+        """encode/decodeShareFragment round-trip both ways; malformed fragments give null."""
         doc = {
             "observatory": {"name": "LBT (Large Binocular Telescope)", "lat": 31.76,
                             "lon": -111.37, "elevation_m": 2283.0,
@@ -474,6 +505,7 @@ class JsCoreNumericTests(unittest.TestCase):
 
 
     def test_html_escape(self):
+        """htmlEscape escapes &, <, >, double and single quotes."""
         cases = [
             ("plain", "plain"),
             ("<b>", "&lt;b&gt;"),
@@ -486,6 +518,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertEqual(self._js("htmlEscape(" + json.dumps(text) + ")"), want)
 
     def test_true_runs(self):
+        """trueRuns recovers run boundaries from a boolean sample."""
         rng = random.Random(7)
         for trial in range(25):
             n = rng.randint(0, 200)
@@ -509,6 +542,7 @@ class JsCoreNumericTests(unittest.TestCase):
                 self.assertAlmostEqual(g[1], r[1], delta=1e-6)
 
     def test_transit_times(self):
+        """transitTimes matches a 60 s LST scan to 1 s."""
         start = Time("2026-11-20 00:00:00")
         end = Time("2026-11-21 06:00:00")
         start_ms = float(start.to_value("unix")) * 1000.0
@@ -537,6 +571,7 @@ class JsCoreNumericTests(unittest.TestCase):
                 self.assertAlmostEqual(g, r, delta=1000.0)  # 1 s
 
     def test_twilight_events(self):
+        """twilightEvents matches threshold crossings to 30 s."""
         start = Time("2026-11-20 00:00:00")
         end = Time("2026-11-21 00:00:00")
         intervals = astro.sun_shading_intervals(LBT, start, end)
@@ -560,6 +595,7 @@ class JsCoreNumericTests(unittest.TestCase):
                 self.assertAlmostEqual(g, r, delta=30000.0)  # 30 s
 
     def test_moon_position(self):
+        """moonRaDec is within 0.03 deg of astropy's full-ELP Moon."""
         # Truncated NAO 1954/ELP theory: ~0.015 deg from astropy's full ELP.
         for iso in ("2000-01-01 00:00:00", "2026-11-20 22:00:00",
                     "2027-06-21 03:00:00", "2050-06-01 00:00:00",
@@ -574,6 +610,7 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertLessEqual(abs(got["dec"]), 28.6, iso)
 
     def test_moon_phase(self):
+        """moonPhase separation and illumination match astropy (0.05 deg, 0.005)."""
         # Reference in TET (equator of date), the frame the JS core works in.
         t = Time("2026-11-20 22:00:00")
         moon = get_body("moon", t, location=EarthLocation(x=0, y=0, z=0, unit="m")).transform_to(TETE(obstime=t))
@@ -584,6 +621,7 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertLessEqual(abs(got["illum"] - (1 - math.cos(math.radians(sep_ref))) / 2), 0.005)
 
     def test_angular_sep(self):
+        """angularSep: quadrants, identity, antipodes, and the pole."""
         self.assertAlmostEqual(self._js("angularSep(0, 0, 6, 0)"), 90.0, delta=1e-9)
         self.assertAlmostEqual(self._js("angularSep(12, 45, 12, 45)"), 0.0, delta=1e-9)
         self.assertAlmostEqual(self._js("angularSep(0, 0, 12, 0)"), 180.0, delta=1e-9)

@@ -3,6 +3,21 @@ from __future__ import annotations
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Run the airmass-gui CLI.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments after the program name; sys.argv is used
+        when omitted.
+
+    Returns
+    -------
+    None
+        With --site, writes the HTML page to the --site path. With
+        --no-gui, writes a PNG to --out (default: airmass_chart.png next
+        to the workspace). Otherwise the tkinter app runs until closed.
+    """
     import argparse
 
     parser = argparse.ArgumentParser(prog="airmass-gui", description="Airmass charts for astronomical targets.")

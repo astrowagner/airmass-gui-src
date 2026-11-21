@@ -1,4 +1,12 @@
 #!/bin/sh
-# Launcher: run airmass-gui from this checkout, no setup needed.
+# airmass-gui: interactive airmass chart for astronomical targets.
+#
+# Usage: airmass-gui [--no-gui] [--out FILE] [--site [OUT]]
+#   --no-gui     render a PNG from the saved workspace (no display needed)
+#   --out FILE   output PNG path for --no-gui (default: next to the workspace)
+#   --site [OUT] build the single-file static page (default: site/index.html)
+#
+# Runs the package from this checkout's .venv (python -m airmass_gui);
+# no installation needed. With no flags the tkinter app runs until closed.
 DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$DIR/.venv/bin/python3" -m airmass_gui "$@"

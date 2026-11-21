@@ -22,6 +22,7 @@ from .chart import FIG_BG, render_figure  # noqa: E402
 from .observatories import CUSTOM, PRESETS, Observatory, from_dict, to_dict  # noqa: E402
 from .workspace import default_path, load, new_workspace, save  # noqa: E402
 
+# Colors of the dark theme.
 THEME = {
     "bg": "#1e1e2e",
     "bg_alt": "#313244",
@@ -34,7 +35,13 @@ THEME = {
 
 
 def _apply_style(root: tk.Tk) -> None:
-    """Apply a dark theme to the ttk widgets and tkinter option defaults."""
+    """Apply a dark theme to the ttk widgets and tkinter option defaults.
+
+    Parameters
+    ----------
+    root : tk.Tk
+        Main window the styles and option defaults attach to.
+    """
     style = ttk.Style(root)
     if "clam" in style.theme_names():
         style.theme_use("clam")
@@ -84,6 +91,11 @@ def _apply_style(root: tk.Tk) -> None:
 
 
 class App:
+    """tkinter window for airmass charts: controls on the left, chart on the right.
+
+    The workspace dict (see the workspace module) is loaded from disk at
+    startup and auto-saved on every change.
+    """
     def __init__(self, root: tk.Tk | None = None):
         self.root = root or tk.Tk()
         self.root.title(f"Airmass Charts {__version__}")
@@ -104,11 +116,13 @@ class App:
         self._schedule_redraw()
 
     def run(self) -> None:
+        """Run the tkinter main loop."""
         self.root.mainloop()
 
     # ------------------------------------------------------------------ menu
 
     def _build_menu(self):
+        """Build the File and Help menus."""
         menu_opts = {
             "bg": THEME["bg"],
             "fg": THEME["fg"],
@@ -134,6 +148,7 @@ class App:
     # -------------------------------------------------------------------- ui
 
     def _build_ui(self):
+        """Build the control column, chart area, and status bar."""
         outer = ttk.Frame(self.root, padding=8)
         outer.grid(row=0, column=0, sticky="nsew")
         self.root.rowconfigure(0, weight=1)
@@ -167,6 +182,19 @@ class App:
         )
 
     def _entry_row(self, parent, label, var, handler):
+        """Add a labeled entry bound to a change handler.
+
+        Parameters
+        ----------
+        parent : ttk widget
+            Frame the row is packed into.
+        label : str
+            Left-hand label text.
+        var : tk.StringVar
+            Variable the entry edits.
+        handler : callable
+            Invoked on KeyRelease and Return.
+        """
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=1)
         ttk.Label(row, text=label, width=22, anchor="w").pack(side="left")
@@ -176,6 +204,7 @@ class App:
         entry.bind("<Return>", handler)
 
     def _build_observatory(self, parent):
+        """Build the observatory panel: preset combobox and the latitude, longitude, elevation, and time-zone entries."""
         frame = ttk.LabelFrame(parent, text="Observatory", padding=6)
         frame.pack(fill="x", pady=(0, 6))
 
@@ -195,6 +224,7 @@ class App:
         self._entry_row(frame, "Time zone:", self.tz_var, self._on_obs_field_edit)
 
     def _build_time_range(self, parent):
+        """Build the time-range panel: local start stamp and duration in days."""
         frame = ttk.LabelFrame(parent, text="Time range (local)", padding=6)
         frame.pack(fill="x", pady=(0, 6))
         self.start_var = tk.StringVar()
@@ -209,6 +239,7 @@ class App:
         spin.bind("<Return>", self._on_change)
 
     def _build_targets(self, parent):
+        """Build the targets panel: object listbox, RA/Dec entries, add/update/remove buttons, and the Simbad lookup row."""
         frame = ttk.LabelFrame(parent, text="Targets", padding=6)
         frame.pack(fill="x")
 
@@ -263,9 +294,19 @@ class App:
     # ------------------------------------------------------------- ui sync
 
     def _set(self, var: tk.StringVar, value: str):
+        """Set a tk variable from code.
+
+        Parameters
+        ----------
+        var : tk.StringVar
+            Variable to update.
+        value : str
+            New value.
+        """
         var.set(value)
 
     def _sync_ui(self):
+        """Push the workspace into every control and name the workspace path in the footer."""
         obs = from_dict(self.data["observatory"])
         preset = self.data["observatory"].get("preset")
         self.obs_var.set(preset if preset in PRESETS else CUSTOM)
@@ -280,6 +321,7 @@ class App:
         self.workspace_var.set(f"Workspace: {self.workspace_path} (auto-saved on every change)")
 
     def _refresh_objects(self):
+        """Rebuild the object listbox from the workspace objects."""
         self.obj_list.delete(0, "end")
         for i, obj in enumerate(self.data.get("objects", [])):
             self.obj_list.insert("end", f"{i + 1}. {obj.get('name', '?')}   RA {obj.get('ra', '?')}   Dec {obj.get('dec', '?')}")
@@ -287,6 +329,7 @@ class App:
     # ------------------------------------------------------------- handlers
 
     def _on_obs_select(self, _event=None):
+        """Fill the observatory fields when a preset is chosen from the combobox."""
         name = self.obs_var.get()
         if name in PRESETS:
             obs = PRESETS[name]
@@ -297,6 +340,7 @@ class App:
         self._on_change()
 
     def _on_obs_field_edit(self, _event=None):
+        """Mark the observatory Custom when an entry drifts from the selected preset."""
         name = self.obs_var.get()
         if name in PRESETS:
             obs = PRESETS[name]
@@ -314,12 +358,14 @@ class App:
         self._on_change()
 
     def _on_change(self, _event=None):
+        """Commit the observatory and time-range fields, save, and schedule a redraw."""
         self._commit_observatory()
         self._commit_time_range()
         self._save()
         self._schedule_redraw()
 
     def _commit_observatory(self):
+        """Write the observatory panel into the workspace, keeping the preset key while the fields match the preset."""
         try:
             lat = float(self.lat_var.get())
             lon = float(self.lon_var.get())
@@ -336,6 +382,7 @@ class App:
         self.data["observatory"] = obs_dict
 
     def _commit_time_range(self):
+        """Write the start stamp and duration into the workspace, ignoring unparseable values."""
         time_range = self.data.setdefault("time_range", {})
         try:
             dt = datetime.fromisoformat(self.start_var.get().strip())
@@ -348,6 +395,7 @@ class App:
             pass
 
     def _on_select_object(self, _event=None):
+        """Load the selected listbox object into the RA/Dec entries."""
         sel = self.obj_list.curselection()
         if not sel:
             return
@@ -358,6 +406,13 @@ class App:
         self._set(self.color_var, obj.get("color", PALETTE[0]))
 
     def _next_color(self) -> str:
+        """Next unused palette color for a new object.
+
+        Returns
+        -------
+        str
+            Hex color from PALETTE (chart module).
+        """
         used = [obj.get("color") for obj in self.data.get("objects", [])]
         for color in PALETTE:
             if color not in used:
@@ -365,6 +420,18 @@ class App:
         return PALETTE[len(self.data.get("objects", [])) % len(PALETTE)]
 
     def _object_from_entries(self) -> dict:
+        """Read the target entries into a workspace object dict, validating RA/Dec.
+
+        Returns
+        -------
+        dict
+            name, ra, dec, color (see the workspace module for the schema).
+
+        Raises
+        ------
+        ValueError
+            If the RA or Dec entry does not parse.
+        """
         name = self.name_var.get().strip() or f"Target {len(self.data.get('objects', [])) + 1}"
         ra = self.ra_var.get().strip()
         dec = self.dec_var.get().strip()
@@ -377,6 +444,7 @@ class App:
         }
 
     def _add_object(self):
+        """Add the entry fields as a new object, or report a parse error in the status bar."""
         try:
             obj = self._object_from_entries()
         except ValueError as exc:
@@ -389,6 +457,7 @@ class App:
         self.status_var.set(f"Added {obj['name']}")
 
     def _update_object(self):
+        """Replace the selected object with the entry fields, or report why not."""
         sel = self.obj_list.curselection()
         if not sel:
             self.status_var.set("Select an object to update")
@@ -404,6 +473,7 @@ class App:
         self.status_var.set(f"Updated {obj['name']}")
 
     def _remove_object(self):
+        """Remove the selected object from the workspace."""
         sel = self.obj_list.curselection()
         if not sel:
             self.status_var.set("Select an object to remove")
@@ -416,6 +486,7 @@ class App:
     # -------------------------------------------------------------- simbad
 
     def _lookup(self, _event=None):
+        """Start a background Simbad lookup for the name in the lookup entry."""
         name = self.lookup_var.get().strip()
         if not name:
             self.status_var.set("Type a target name to look up (e.g., Vega)")
@@ -425,6 +496,13 @@ class App:
         threading.Thread(target=self._lookup_worker, args=(name,), daemon=True).start()
 
     def _lookup_worker(self, name: str):
+        """Query Simbad in a worker thread and report back on the main loop.
+
+        Parameters
+        ----------
+        name : str
+            Target name to query.
+        """
         try:
             result = lookup.simbad_lookup(name)
             self.root.after(0, self._lookup_done, name, result, None)
@@ -432,6 +510,17 @@ class App:
             self.root.after(0, self._lookup_done, name, None, f"{exc.__class__.__name__}: {exc}")
 
     def _lookup_done(self, name: str, result, error):
+        """Add the looked-up target on success, or show the error in the status bar.
+
+        Parameters
+        ----------
+        name : str
+            Name that was queried.
+        result : dict or None
+            Lookup result per lookup.simbad_lookup, or None on failure.
+        error : str or None
+            Error message, or None on success.
+        """
         self.lookup_btn.config(state="normal")
         if error is not None:
             self.lookup_status_var.set(f"Lookup failed: {error}")
@@ -454,11 +543,13 @@ class App:
     # --------------------------------------------------------------- chart
 
     def _schedule_redraw(self):
+        """Schedule a chart redraw 150 ms from now, replacing any pending one."""
         if self._redraw_job is not None:
             self.root.after_cancel(self._redraw_job)
         self._redraw_job = self.root.after(150, self._redraw)
 
     def _redraw(self, *_):
+        """Rebuild the chart canvas and navigation toolbar from the workspace."""
         self._redraw_job = None
         for child in self.canvas_holder.winfo_children():
             child.destroy()
@@ -481,21 +572,25 @@ class App:
     # -------------------------------------------------------- workspace
 
     def _save(self, *_):
+        """Save the workspace to disk, reporting failures in the status bar."""
         try:
             save(self.workspace_path, self.data)
         except Exception as exc:
             self.status_var.set(f"Save failed: {exc}")
 
     def on_exit(self):
+        """Save the workspace and close the window."""
         self._save()
         self.root.destroy()
 
     def new_workspace(self):
+        """Discard the current workspace for a fresh default one."""
         self.data = new_workspace()
         self._sync_ui()
         self._on_change()
 
     def open_workspace(self):
+        """Open a workspace JSON from a file dialog and switch to it."""
         path = filedialog.askopenfilename(
             title="Open workspace", filetypes=[("JSON workspace", "*.json"), ("All files", "*.*")]
         )
@@ -512,6 +607,7 @@ class App:
         self.status_var.set(f"Opened {path}")
 
     def save_as(self):
+        """Save the workspace to a path chosen in a file dialog."""
         path = filedialog.asksaveasfilename(
             title="Save workspace as", defaultextension=".json", filetypes=[("JSON workspace", "*.json")]
         )
@@ -523,6 +619,7 @@ class App:
         self.status_var.set(f"Workspace saved to {path}")
 
     def about(self):
+        """Show the about box with version, method credits, and the workspace path."""
         messagebox.showinfo(
             "Airmass Charts",
             f"Airmass Charts {__version__}\n\n"
