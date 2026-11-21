@@ -1217,20 +1217,90 @@ function decodeShareFragment(hash) {
 }
 
 /**
+ * J2000 coordinates of a target at an instant.
+ *
+ * A target without an ephemeris returns its catalog ra/dec (J2000),
+ * unchanged. A target with a Horizons ephemeris (obj.ephemeris, rows
+ * [ms, raDeg, decDeg] sorted by time) is linearly interpolated in ra
+ * and dec between the bracketing rows, the ra difference taken across
+ * the 0/360 deg wrap; times outside the table clamp to the nearest
+ * row, so a moving target simply freezes before and after its
+ * coverage.
+ *
+ * @param {{ra?: string, dec?: string, ephemeris?: ?Array}} obj - Target
+ *     record.
+ * @param {number} ms - Epoch ms.
+ * @returns {{raDeg: number, dec: number}} J2000 coordinates; raDeg in
+ *     degrees, 0-360.
+ * @throws {Error} When the target has neither usable ra/dec nor an
+ *     ephemeris.
+ */
+function objCoords(obj, ms) {
+  var ep = obj.ephemeris;
+  if (ep && ep.length > 0) {
+    if (ms <= ep[0][0]) return { raDeg: wrap360(ep[0][1]), dec: ep[0][2] };
+    for (var i = 0; i < ep.length - 1; i++) {
+      if (ms <= ep[i + 1][0]) {
+        var a = ep[i], b = ep[i + 1];
+        var f = (b[0] - a[0]) === 0 ? 0 : (ms - a[0]) / (b[0] - a[0]);
+        var dra = (b[1] - a[1] + 540) % 360 - 180;
+        return { raDeg: wrap360(a[1] + dra * f), dec: a[2] + (b[2] - a[2]) * f };
+      }
+    }
+    var last = ep[ep.length - 1];
+    return { raDeg: wrap360(last[1]), dec: last[2] };
+  }
+  return { raDeg: parseRa(obj.ra) * 15, dec: parseDec(obj.dec) };
+}
+
+/**
+ * Parse a JPL Horizons ephemeris response into [ms, raDeg, decDeg] rows.
+ *
+ * Reads the 'date = YYYY-MM-DD HH:MM:SS' (UTC) and
+ * 'radec_j2000 = RA Dec' (degrees) lines of a horizons.api reply with
+ * custom_fields=radec_j2000. Each ra/dec line pairs with the most
+ * recent date line; comment and error lines are skipped.
+ *
+ * @param {string} text - Raw response body.
+ * @returns {Array<Array<number>>} Rows [epoch ms, raDeg, decDeg] in
+ *     time order; raDeg as returned (0-360).
+ * @throws {Error} When no ephemeris rows are present.
+ */
+function horizonsParse(text) {
+  var rows = [];
+  var ms = null;
+  var lines = String(text).split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var d = /^\s*date\s*=\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/.exec(lines[i]);
+    if (d) {
+      var q = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(d[1]);
+      ms = Date.UTC(+q[1], +q[2] - 1, +q[3], +q[4], +q[5], +q[6]);
+      continue;
+    }
+    var r = /^\s*radec_j2000\s*=\s*(-?[\d.]+)\s+(-?[\d.]+)/.exec(lines[i]);
+    if (r && ms != null) rows.push([ms, +r[1], +r[2]]);
+  }
+  if (rows.length === 0) throw new Error("no ephemeris rows in response");
+  return rows;
+}
+
+/**
  * One-line Simbad info for a target, as shown on its edit row and in
  * the chart tooltip.
  *
- * @param {{mag?: ?number, spec?: ?string, plx?: ?number}} obj - Target
- *     record; mag is the V magnitude, spec the spectral type, plx the
- *     parallax in mas; each is absent or null when the lookup had none.
- * @returns {string} e.g. "V 0.03 \u00b7 A0V \u00b7 130.2 mas"; empty when
- *     the target carries no Simbad info.
+ * @param {{mag?: ?number, spec?: ?string, plx?: ?number,
+ *     ephemeris?: ?Array}} obj - Target record; mag is the V magnitude,
+ *     spec the spectral type, plx the parallax in mas, ephemeris the
+ *     Horizons rows; each is absent or null when the lookup had none.
+ * @returns {string} e.g. "V 0.03 \u00b7 A0V \u00b7 130.2 mas \u00b7 eph 72 pts";
+ *     empty when the target carries no lookup info.
  */
 function targetInfoText(obj) {
   var parts = [];
   if (isFinite(obj.mag)) parts.push("V " + obj.mag.toFixed(2));
   if (obj.spec) parts.push(String(obj.spec));
   if (isFinite(obj.plx)) parts.push(obj.plx.toFixed(1) + " mas");
+  if (obj.ephemeris) parts.push("eph " + obj.ephemeris.length + " pts");
   return parts.join(" \u00b7 ");
 }
 
@@ -1633,7 +1703,8 @@ function renderTargets() {
       '<input placeholder="Name" title="Name">' +
       '<input placeholder="RA (h:m:s / deg)" title="RA">' +
       '<input placeholder="Dec (d:m:s / deg)" title="Dec">' +
-      '<span class="info" title="Simbad info; click to clear"></span>' +
+      '<span class="info" title="Lookup info; click to clear"></span>' +
+      '<button class="hz" title="Fetch this target\'s ephemeris from JPL Horizons (moving objects)" type="button">Horizons</button>' +
       '<button class="rm" title="Remove" type="button">&#215;</button>';
     var kids = row.children;
     kids[0].value = /^#[0-9a-fA-F]{6}$/.test(obj.color || "") ? obj.color : PALETTE[i % PALETTE.length];
@@ -1643,14 +1714,32 @@ function renderTargets() {
     kids[4].textContent = targetInfoText(obj);
     kids[0].addEventListener("input", function () { obj.color = this.value; afterTargetChange(); });
     kids[1].addEventListener("input", function () { obj.name = this.value; afterTargetChange(); });
-    kids[2].addEventListener("input", function () { obj.ra = this.value; afterTargetChange(); });
-    kids[3].addEventListener("input", function () { obj.dec = this.value; afterTargetChange(); });
+    kids[2].addEventListener("input", function () { obj.ra = this.value; delete obj.ephemeris; afterTargetChange(); });
+    kids[3].addEventListener("input", function () { obj.dec = this.value; delete obj.ephemeris; afterTargetChange(); });
     kids[4].addEventListener("click", function () {
-      delete obj.mag; delete obj.spec; delete obj.plx;
+      delete obj.mag; delete obj.spec; delete obj.plx; delete obj.ephemeris;
       renderTargets();
       afterTargetChange();
     });
     kids[5].addEventListener("click", function () {
+      var nm = obj.name ? String(obj.name).trim() : "";
+      if (!nm) {
+        setStatus("Give this target a name to fetch its Horizons ephemeris");
+        return;
+      }
+      setStatus("Fetching ephemeris for \u201c" + nm + "\u201d from Horizons\u2026");
+      horizonsLookup(nm)
+        .then(function (rows) {
+          obj.ephemeris = rows;
+          renderTargets();
+          afterTargetChange();
+          setStatus("Stored " + rows.length + " ephemeris points for \u201c" + nm + "\u201d");
+        })
+        .catch(function (error) {
+          setStatus(error.message);
+        });
+    });
+    kids[6].addEventListener("click", function () {
       state.objects.splice(i, 1);
       renderTargets();
       afterTargetChange();
@@ -1846,17 +1935,17 @@ function summaryData() {
   var targets = [], okArrays = [];
   state.objects.forEach(function (obj, oi) {
     var name = obj.name || "Target " + (oi + 1);
-    var raH, dec;
     try {
-      raH = parseRa(obj.ra);
-      dec = parseDec(obj.dec);
+      parseRa(obj.ra);
+      parseDec(obj.dec);
     } catch (e) { return; }
     var altAt = [];
     for (var k = 0; k < n; k++) {
       var ms = startMs + k * step;
       if (ms > endMs) break;
       var jd = jdFromUtcMs(ms);
-      var tt = precessIcrsToTete(raH * 15, dec, jd);
+      var c = objCoords(obj, ms);
+      var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
       altAt.push(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon));
     }
     var ok = altAt.map(function (a) { return a >= thrAlt; });
@@ -1884,9 +1973,11 @@ function summaryData() {
         if (altAt[ki] > maxAlt) maxAlt = altAt[ki];
       }
       var transits = [];
-      transitTimes(raH, day[0], day[1], obs.lon).forEach(function (tm) {
+      var midRa = objCoords(obj, 0.5 * (day[0] + day[1])).raDeg / 15;
+      transitTimes(midRa, day[0], day[1], obs.lon).forEach(function (tm) {
         var jd = jdFromUtcMs(tm);
-        var tt = precessIcrsToTete(raH * 15, dec, jd);
+        var tc = objCoords(obj, tm);
+        var tt = precessIcrsToTete(tc.raDeg, tc.dec, jd);
         var altT = altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
         transits.push({ ms: tm, x: airmass(altT) });
       });
@@ -1990,8 +2081,9 @@ function renderSummary() {
  * altitude, the minimum airmass while above the horizon, and the number
  * of sample hours with airmass at or below the threshold.
  *
- * @param {number} raDeg - ICRS J2000 RA in degrees.
- * @param {number} dec - ICRS J2000 Dec in degrees.
+ * @param {function(number): {raDeg: number, dec: number}} coords -
+     J2000 coordinates of the target at each sample time (objCoords
+     for a state target; a constant for a static target).
  * @param {string} tz - IANA time zone name.
  * @param {number} lat - Observatory latitude in degrees.
  * @param {number} lon - Observatory longitude in degrees.
@@ -2003,7 +2095,7 @@ function renderSummary() {
  *     never rises), minAir (airmass; Infinity when it never rises),
  *     hours (float, count of sample hours with X <= threshold)}.
  */
-function annualCalendarMonths(raDeg, dec, tz, lat, lon, monthStartMs, threshold) {
+function annualCalendarMonths(coords, tz, lat, lon, monthStartMs, threshold) {
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var p0 = tzParts(tz, monthStartMs);
@@ -2017,7 +2109,8 @@ function annualCalendarMonths(raDeg, dec, tz, lat, lon, monthStartMs, threshold)
     b = (p.year * 12 + p.month) - (p0.year * 12 + p0.month);
     if (b < 0 || b > 11) continue;
     var jd = jdFromUtcMs(ms);
-    var tt = precessIcrsToTete(raDeg, dec, jd);
+    var c = coords(ms);
+    var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
     var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, lat, lon);
     if (first[b] === undefined) {
       first[b] = true;
@@ -2053,21 +2146,23 @@ function calendarData() {
   var tz = resolveTz(obs.timezone);
   var key = JSON.stringify([
     obs.lat, obs.lon, tz, state.options.threshold, state.time_range.start,
-    state.objects.map(function (obj) { return [obj.ra, obj.dec]; }),
+    state.objects.map(function (obj) {
+      return [obj.ra, obj.dec, obj.ephemeris ? obj.ephemeris.length : null];
+    }),
   ]);
   if (__calCache.key === key) return __calCache.data;
   var p0 = tzParts(tz, startMs);
   var monthStart = wallToUtc(tz, p0.year, p0.month, 1, 0, 0, 0);
   var targets = [];
   state.objects.forEach(function (obj, oi) {
-    var raH, dec;
     try {
-      raH = parseRa(obj.ra);
-      dec = parseDec(obj.dec);
+      parseRa(obj.ra);
+      parseDec(obj.dec);
     } catch (e) { return; }
     targets.push({
       name: obj.name || "Target " + (oi + 1),
-      months: annualCalendarMonths(raH * 15, dec, tz, obs.lat, obs.lon,
+      months: annualCalendarMonths(function (ms) { return objCoords(obj, ms); },
+                                   tz, obs.lat, obs.lon,
                                    monthStart, state.options.threshold),
     });
   });
@@ -2307,8 +2402,8 @@ function draw() {
     var name = obj.name || "Target " + (oi + 1);
     var color = obj.color || PALETTE[0];
     try {
-      targets.push({ name: name, color: color,
-                     raH: parseRa(obj.ra), dec: parseDec(obj.dec) });
+      parseRa(obj.ra); parseDec(obj.dec);  // validate
+      targets.push({ name: name, color: color, obj: obj });
     } catch (e) {
       errors.push(name + ": " + e.message);
     }
@@ -2339,7 +2434,8 @@ function draw() {
         var ms = v0 + k * bstep;
         if (ms > v1) break;
         var jd = jdFromUtcMs(ms);
-        var tt = precessIcrsToTete(tg.raH * 15, tg.dec, jd);
+        var c = objCoords(tg.obj, ms);
+        var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
         ok.push(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon) >= thrAlt);
       }
       var runs = trueRuns(ok, v0, bstep);
@@ -2353,7 +2449,7 @@ function draw() {
     ctx.restore();
     // transit ticks on the time axis, colored per target
     targets.forEach(function (tg) {
-      var trs = transitTimes(tg.raH, v0, v1, obs.lon);
+      var trs = transitTimes(objCoords(tg.obj, 0.5 * (v0 + v1)).raDeg / 15, v0, v1, obs.lon);
       ctx.fillStyle = tg.color;
       for (var tti = 0; tti < trs.length; tti++) {
         ctx.fillRect(X(trs[tti]) - 1.5, plot.y + plot.h - 8, 3, 8);
@@ -2365,13 +2461,14 @@ function draw() {
   var step = Math.min(5 * 60 * 1000, Math.max(1000, (v1 - v0) / 400));
   var n = Math.ceil((v1 - v0) / step) + 1;
   targets.forEach(function (tg) {
-    var name = tg.name, color = tg.color, raH = tg.raH, dec = tg.dec;
+    var name = tg.name, color = tg.color, tobj = tg.obj;
     var pts = [];
     for (var k = 0; k < n; k++) {
       var ms = v0 + k * step;
       if (ms > v1) break;
       var jd = jdFromUtcMs(ms);
-      var tt = precessIcrsToTete(raH * 15, dec, jd);
+      var c = objCoords(tobj, ms);
+      var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
       pts.push([ms, airmass(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon))]);
     }
     var finite = pts.filter(function (p) { return isFinite(p[1]); });
@@ -2380,7 +2477,8 @@ function draw() {
     var rises = false;
     for (var ck = 0; ck <= Math.ceil((endMs - startMs) / cstep); ck++) {
       var cjd = jdFromUtcMs(startMs + ck * cstep);
-      var ctt = precessIcrsToTete(raH * 15, dec, cjd);
+      var cc = objCoords(tobj, startMs + ck * cstep);
+      var ctt = precessIcrsToTete(cc.raDeg, cc.dec, cjd);
       if (altitude(ctt.raDeg / 15, ctt.dec, cjd, obs.lat, obs.lon) > 0) { rises = true; break; }
     }
     if (!rises) below.push(name);
@@ -2660,15 +2758,14 @@ function updateTooltip(e) {
   var lines = [localStamp(ms) + " local"];
   state.objects.forEach(function (obj, oi) {
     var name = obj.name || "Target " + (oi + 1);
-    var raH, dec;
+    var c;
     try {
-      raH = parseRa(obj.ra);
-      dec = parseDec(obj.dec);
+      c = objCoords(obj, ms);
     } catch (err) {
       lines.push(name + ":  (unparseable coordinates)");
       return;
     }
-    var tt = precessIcrsToTete(raH * 15, dec, jd);
+    var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
     var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
     var info = targetInfoText(obj);
     if (hd.alt <= 0) {
@@ -3198,6 +3295,84 @@ async function simbadLookup(name) {
     }
   }
   throw new Error("Simbad lookup failed for \u201c" + name + "\u201d: " + errors.join("; "));
+}
+
+/**
+ * Format an epoch as a UTC 'YYYY-MM-DD HH:MM:SS' string.
+ *
+ * @param {number} ms - Epoch ms.
+ * @returns {string} e.g. '2026-02-02 05:00:00'.
+ */
+function utcStamp(ms) {
+  var d = new Date(ms);
+  var q = function (n) { return (n < 10 ? "0" : "") + n; };
+  return d.getUTCFullYear() + "-" + q(d.getUTCMonth() + 1) + "-" +
+         q(d.getUTCDate()) + " " + q(d.getUTCHours()) + ":" +
+         q(d.getUTCMinutes()) + ":" + q(d.getUTCSeconds());
+}
+
+/**
+ * Build a JPL Horizons API URL for geocentric apparent RA/Dec.
+ *
+ * Requests radec_j2000 (J2000-equatorial RA, Dec in degrees) sampled
+ * at about 1000 steps across [t0Ms, t1Ms] from the observatory site,
+ * using the geodetic-observer form '500@lat,lon,elev'.
+ *
+ * @param {string} name - Object name as Horizons will recognize it
+ *     (asteroid, comet, spacecraft, named star, ...).
+ * @param {Object} obs - Observatory with lat, lon, elevation_m.
+ * @param {number} t0Ms - Epoch ms, start of coverage.
+ * @param {number} t1Ms - Epoch ms, end of coverage.
+ * @returns {string} Fully formed query URL.
+ */
+function horizonsUrl(name, obs, t0Ms, t1Ms) {
+  var step = Math.max(3600, Math.round((t1Ms - t0Ms) / 1e6));
+  return "https://ssd-api.jpl.nasa.gov/horizons.api" +
+         "?format=5" +
+         "&CMT=1" +
+         "&OBJ_ID=" + encodeURIComponent("'" + name + "'") +
+         "&custom_fields=radec_j2000" +
+         "&observatory=500@" + obs.lat + "," + obs.lon + "," + (obs.elevation_m || 0) +
+         "&start_time=" + encodeURIComponent(utcStamp(t0Ms)) +
+         "&stop_time=" + encodeURIComponent(utcStamp(t1Ms)) +
+         "&STEP=" + step + "s";
+}
+
+/**
+ * Fetch a Horizons API response as text, with a 30 s timeout.
+ *
+ * @param {string} url - Fully formed horizons.api query URL.
+ * @returns {Promise<string>} Response body.
+ * @throws {Error} On timeout, network failure, or non-2xx status.
+ */
+function horizonsFetchText(url) {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, 30000);
+  return fetch(url, { signal: controller.signal })
+    .catch(function (error) {
+      throw new Error(error && error.name === "AbortError" ? "timed out" : error.message);
+    })
+    .then(function (response) {
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      return response.text();
+    })
+    .finally(function () { clearTimeout(timer); });
+}
+
+/**
+ * Fetch a moving target's ephemeris from JPL Horizons for the workspace range.
+ *
+ * @param {string} name - Object name as Horizons will recognize it.
+ * @returns {Promise<Array<Array<number>>>} Rows [epoch ms, raDeg,
+ *     decDeg] covering the workspace time range.
+ * @throws {Error} When the time range is unparseable, the request
+ *     fails, or the response carries no ephemeris rows.
+ */
+function horizonsLookup(name) {
+  var s = startUtcMs(), e = endUtcMs();
+  if (s == null || e == null) throw new Error("set a valid time range first");
+  var url = horizonsUrl(name, state.observatory, s, e);
+  return horizonsFetchText(url).then(horizonsParse);
 }
 
 /**

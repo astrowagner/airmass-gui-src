@@ -45,6 +45,7 @@ CORE_FUNCTIONS = [
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
+    "objCoords", "horizonsParse",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -674,6 +675,41 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertAlmostEqual(self._js("angularSep(0, 0, 12, 0)"), 180.0, delta=1e-9)
         # Both targets at the north celestial pole: RA is undefined there, sep 0.
         self.assertAlmostEqual(self._js("angularSep(0, 90, 12, 90)"), 0.0, delta=1e-9)
+
+    def test_obj_coords_static(self):
+        """objCoords returns the catalog coordinates for a static target."""
+        got = self._js("objCoords({ra: '18:36:56.30142', dec: '+38:47:01.4506'}, 1000000)")
+        self.assertAlmostEqual(got["raDeg"], 279.2345917, delta=0.001)
+        self.assertAlmostEqual(got["dec"], 38.7837361, delta=0.001)
+
+    def test_obj_coords_interpolates_with_wrap(self):
+        """objCoords interpolates a moving table and wraps RA across 0/360."""
+        ep = [[0, 359.0, 47.0], [3600000, 359.5, 47.01], [7200000, 0.0, 47.02], [10800000, 1.0, 47.03]]
+        mid = self._js("objCoords({ephemeris: %s}, 5400000)" % ep)
+        self.assertAlmostEqual(mid["raDeg"], 359.75, delta=0.001)
+        self.assertAlmostEqual(mid["dec"], 47.015, delta=0.001)
+        after = self._js("objCoords({ephemeris: %s}, 8100000)" % ep)
+        self.assertAlmostEqual(after["raDeg"], 0.25, delta=0.001)
+        before = self._js("objCoords({ephemeris: %s}, -1000)" % ep)
+        self.assertAlmostEqual(before["raDeg"], 359.0, delta=1e-9)
+
+    def test_horizons_parse(self):
+        """horizonsParse reads date/radec_j2000 pairs and rejects empty replies."""
+        text = (
+            "header line\n"
+            "       date = 2026-02-02 05:00:00\n"
+            "     radec_j2000 =   134.92242957  22.11225783\n"
+            "       date = 2026-02-02 06:00:00\n"
+            "     radec_j2000 =   134.97242957  22.11235783\n"
+            "ERROR: trailing note\n"
+        )
+        rows = json.loads(self._js("JSON.stringify(horizonsParse(%s))" % json.dumps(text)))
+        self.assertEqual(len(rows), 2)
+        self.assertAlmostEqual(rows[0][1], 134.92242957)
+        self.assertAlmostEqual(rows[1][2], 22.11235783)
+        self.assertEqual(rows[1][0], 1770012000000)
+        with self.assertRaises(Exception):
+            self._js("horizonsParse('ERROR: no rows here')")
 
 
 if __name__ == "__main__":
