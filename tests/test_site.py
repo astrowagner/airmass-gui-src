@@ -18,7 +18,7 @@ import numpy as np
 
 import html as html_mod
 from astropy import units as u
-from astropy.coordinates import AltAz, SkyCoord, TETE, get_sun
+from astropy.coordinates import AltAz, EarthLocation, SkyCoord, TETE, get_body, get_sun
 from astropy.time import Time
 
 from airmass_gui import astro, chart, lookup
@@ -44,6 +44,7 @@ CORE_FUNCTIONS = [
     "parseDec", "simbadParseRecord",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents",
+    "moonRaDec", "moonPhase", "angularSep",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -138,6 +139,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<input id="threshold"', self.page)
         self.assertIn('<div id="summary">', self.page)
         self.assertIn("function renderSummary()", self.page)
+
+    def test_moon_ui(self):
+        self.assertIn('<input id="moon-chk"', self.page)
+        self.assertIn("function moonRaDec(", self.core)
+        self.assertIn("function moonPhase(", self.core)
+        self.assertIn("function angularSep(", self.core)
 
     def test_shareable_url(self):
         self.assertIn('<button id="copylink-btn"', self.page)
@@ -545,6 +552,38 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertEqual(len(got), len(ref), thr)
             for g, r in zip(got, ref):
                 self.assertAlmostEqual(g, r, delta=30000.0)  # 30 s
+
+    def test_moon_position(self):
+        # Truncated NAO 1954/ELP theory: ~0.015 deg from astropy's full ELP.
+        for iso in ("2000-01-01 00:00:00", "2026-11-20 22:00:00",
+                    "2027-06-21 03:00:00", "2050-06-01 00:00:00",
+                    "2090-01-01 00:00:00"):
+            t = Time(iso)
+            moon = get_body("moon", t, location=EarthLocation(x=0, y=0, z=0, unit="m")).transform_to(TETE(obstime=t))
+            got = json.loads(self._js(f"JSON.stringify(moonRaDec({float(t.jd)}))"))
+            got_coord = SkyCoord(ra=got["raH"] * 15.0 * u.deg, dec=got["dec"] * u.deg,
+                                 frame="tete", obstime=t)
+            self.assertLessEqual(got_coord.separation(moon).deg, 0.03, iso)
+            self.assertLessEqual(abs(got["dec"] - moon.dec.deg), 0.02, iso)
+            self.assertLessEqual(abs(got["dec"]), 28.6, iso)
+
+    def test_moon_phase(self):
+        # Reference in TET (equator of date), the frame the JS core works in.
+        t = Time("2026-11-20 22:00:00")
+        moon = get_body("moon", t, location=EarthLocation(x=0, y=0, z=0, unit="m")).transform_to(TETE(obstime=t))
+        sun = get_sun(t).transform_to(TETE(obstime=t))
+        sep_ref = moon.separation(sun).deg
+        got = json.loads(self._js(f"JSON.stringify(moonPhase({float(t.jd)}))"))
+        self.assertLessEqual(abs(got["sepDeg"] - sep_ref), 0.05)
+        self.assertLessEqual(abs(got["illum"] - (1 - math.cos(math.radians(sep_ref))) / 2), 0.005)
+
+    def test_angular_sep(self):
+        self.assertAlmostEqual(self._js("angularSep(0, 0, 6, 0)"), 90.0, delta=1e-9)
+        self.assertAlmostEqual(self._js("angularSep(12, 45, 12, 45)"), 0.0, delta=1e-9)
+        self.assertAlmostEqual(self._js("angularSep(0, 0, 12, 0)"), 180.0, delta=1e-9)
+        # Both targets at the north celestial pole: RA is undefined there, sep 0.
+        self.assertAlmostEqual(self._js("angularSep(0, 90, 12, 90)"), 0.0, delta=1e-9)
+
 
 if __name__ == "__main__":
     unittest.main()
