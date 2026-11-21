@@ -147,6 +147,9 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function renderSummary()", self.page)
         self.assertIn("sum-total", self.page)
         self.assertIn("any target", self.page)
+        self.assertIn('<button id="csv-btn"', self.page)
+        self.assertIn("function summaryData(", self.page)
+        self.assertIn("function windowsCsv(", self.page)
 
     def test_moon_ui(self):
         """Moon checkbox and the three moon core functions are present."""

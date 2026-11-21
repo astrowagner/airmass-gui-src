@@ -227,6 +227,9 @@ footer li { margin-bottom: 0.2rem; }
   <div class="panel" id="summary-panel">
     <h2>Observing windows</h2>
     <div id="summary"></div>
+    <div class="actions">
+      <button id="csv-btn" title="Download the observing windows as CSV">Windows CSV</button>
+    </div>
   </div>
 </main>
 </div>
@@ -1749,20 +1752,27 @@ function clearSummary() {
  * day where it starts (a run crossing midnight is listed in full on its
  * start day). Transit times and their airmass are listed per day.
  */
-function renderSummary() {
-  var box = $("summary");
-  box.innerHTML = "";
-  if (!state.options.windows) {
-    $("summary-panel").style.display = "none";
-    return;
-  }
+/**
+ * Compute the observing-window data for the summary panel and CSV export.
+ *
+ * Samples each target's altitude on an at-most-800-point grid over the
+ * full range, thresholds it at the chosen max airmass, and groups the
+ * resulting runs by local day.
+ *
+ * @returns {?Object} null when the time range is unparseable; otherwise
+ *     {tz (the resolved time zone), threshold (the max airmass), days
+ *     ([[startMs, endMs, 'YYYY-MM-DD']]), targets ([{name, totalH
+ *     (hours at or below the threshold over the whole range), days
+ *     ([{everUp (the target was above the horizon that day), maxAlt
+ *     (degrees), runs ([[startMs, endMs)]], transits ([{ms, x (airmass,
+ *     Infinity below the horizon)}])}])]}), and anyH (the union hours
+ *     across all targets)}.
+ */
+function summaryData() {
   var obs = state.observatory;
   var tz = resolveTz(obs.timezone);
   var startMs = startUtcMs(), endMs = endUtcMs();
-  if (startMs == null || endMs == null) {
-    $("summary-panel").style.display = "none";
-    return;
-  }
+  if (startMs == null || endMs == null) return null;
   var thrAlt = altFromAirmass(state.options.threshold);
   var step = Math.max(60000, (endMs - startMs) / 800);
   var n = Math.ceil((endMs - startMs) / step) + 1;
@@ -1771,11 +1781,11 @@ function renderSummary() {
   while (dayStart < endMs) {
     var dayEnd = Math.min(nextLocalMidnight(tz, dayStart + 1), endMs);
     if (dayEnd - dayStart < 3600000) dayEnd = endMs; // degenerate tz data: ensure progress
-    days.push([dayStart, dayEnd]);
+    var p = tzParts(tz, dayStart + 1000);
+    days.push([dayStart, dayEnd, p.year + "-" + pad2(p.month) + "-" + pad2(p.day)]);
     dayStart = dayEnd;
   }
-  var html = "", anyTarget = false;
-  var totals = [], okArrays = [];
+  var targets = [], okArrays = [];
   state.objects.forEach(function (obj, oi) {
     var name = obj.name || "Target " + (oi + 1);
     var raH, dec;
@@ -1783,7 +1793,6 @@ function renderSummary() {
       raH = parseRa(obj.ra);
       dec = parseDec(obj.dec);
     } catch (e) { return; }
-    anyTarget = true;
     var altAt = [];
     for (var k = 0; k < n; k++) {
       var ms = startMs + k * step;
@@ -1793,74 +1802,152 @@ function renderSummary() {
       altAt.push(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon));
     }
     var ok = altAt.map(function (a) { return a >= thrAlt; });
-    var runs = trueRuns(ok, startMs, step);
     okArrays.push(ok);
-    var tot = 0;
-    runs.forEach(function (run) { tot += (run[1] - run[0]) / 3600000; });
-    totals.push({ name: name, h: tot });
-    html += '<div class="sum-target"><b>' + htmlEscape(name) + "</b>";
-    var shownOnDay = {};
+    var runs = trueRuns(ok, startMs, step);
+    var totalH = 0;
+    runs.forEach(function (run) { totalH += (run[1] - run[0]) / 3600000; });
+    var dayRuns = [];
+    days.forEach(function () { dayRuns.push([]); });
     runs.forEach(function (run) {
       var dayIdx = 0;
       for (var di = 0; di < days.length; di++) {
         if (run[0] >= days[di][0]) { dayIdx = di; break; }
         dayIdx = di;
       }
-      if (shownOnDay[dayIdx] === undefined) shownOnDay[dayIdx] = [];
-      shownOnDay[dayIdx].push(run);
+      dayRuns[dayIdx].push(run);
     });
+    var dayInfo = [];
     days.forEach(function (day, di) {
-      var p = tzParts(tz, day[0] + 1000);
-      var label = p.year + "-" + pad2(p.month) + "-" + pad2(p.day);
-      var dayRuns = shownOnDay[di] || [];
-      var dayEndIdx = Math.min(n - 1, Math.ceil((day[1] - startMs) / step));
       var everUp = false, maxAlt = -90;
+      var dayEndIdx = Math.min(n - 1, Math.ceil((day[1] - startMs) / step));
       for (var ki = Math.max(0, Math.floor((day[0] - startMs) / step));
            ki <= dayEndIdx; ki++) {
         if (altAt[ki] > 0) everUp = true;
         if (altAt[ki] > maxAlt) maxAlt = altAt[ki];
       }
+      var transits = [];
+      transitTimes(raH, day[0], day[1], obs.lon).forEach(function (tm) {
+        var jd = jdFromUtcMs(tm);
+        var tt = precessIcrsToTete(raH * 15, dec, jd);
+        var altT = altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
+        transits.push({ ms: tm, x: airmass(altT) });
+      });
+      dayInfo.push({ everUp: everUp, maxAlt: maxAlt,
+                     runs: dayRuns[di], transits: transits });
+    });
+    targets.push({ name: name, totalH: totalH, days: dayInfo });
+  });
+  var anyOk = okArrays.length ? okArrays[0].slice() : [];
+  okArrays.forEach(function (arr) {
+    for (var ai = 0; ai < arr.length; ai++) { if (arr[ai]) anyOk[ai] = true; }
+  });
+  var anyH = 0;
+  if (okArrays.length) {
+    trueRuns(anyOk, startMs, step).forEach(function (run) {
+      anyH += (run[1] - run[0]) / 3600000;
+    });
+  }
+  return { tz: tz, threshold: state.options.threshold, days: days,
+           targets: targets, anyH: anyH };
+}
+
+/**
+ * Render the observing-window summary panel from summaryData().
+ *
+ * Shows the cumulative totals header, then, per target and local day,
+ * the window list with durations, transit airmass, and below-horizon
+ * or no-window notes.
+ */
+function renderSummary() {
+  var box = $("summary");
+  box.innerHTML = "";
+  if (!state.options.windows) {
+    $("summary-panel").style.display = "none";
+    return;
+  }
+  var data = summaryData();
+  if (!data) {
+    $("summary-panel").style.display = "none";
+    return;
+  }
+  var html = "", anyTarget = data.targets.length > 0;
+  if (anyTarget) {
+    var head = [];
+    data.targets.forEach(function (t) { head.push(htmlEscape(t.name) + " " + t.totalH.toFixed(1) + " h"); });
+    head.push("any target " + data.anyH.toFixed(1) + " h");
+    html = '<div class="sum-total"><b>Cumulative X \u2264 ' +
+           data.threshold.toFixed(2) + ':</b>  ' + head.join(";  ") + "</div>";
+  }
+  data.targets.forEach(function (t) {
+    html += '<div class="sum-target"><b>' + htmlEscape(t.name) + "</b>";
+    t.days.forEach(function (d, di) {
       var parts = [];
-      if (!everUp) {
+      if (!d.everUp) {
         parts.push("below horizon");
-      } else if (dayRuns.length === 0) {
-        parts.push("no time with X \u2264 " + state.options.threshold.toFixed(2) +
-                   " (max alt " + maxAlt.toFixed(1) + "\u00b0)");
+      } else if (d.runs.length === 0) {
+        parts.push("no time with X \u2264 " + data.threshold.toFixed(2) +
+                   " (max alt " + d.maxAlt.toFixed(1) + "\u00b0)");
       } else {
-        dayRuns.forEach(function (run) {
-          parts.push(hmStr(tz, run[0]) + "\u2013" + hmStr(tz, run[1]) +
+        d.runs.forEach(function (run) {
+          parts.push(hmStr(data.tz, run[0]) + "\u2013" + hmStr(data.tz, run[1]) +
                      " \u00b7 " + ((run[1] - run[0]) / 3600000).toFixed(1) + " h");
         });
-        var trs = transitTimes(raH, day[0], day[1], obs.lon);
-        trs.forEach(function (tm) {
-          var jd = jdFromUtcMs(tm);
-          var tt = precessIcrsToTete(raH * 15, dec, jd);
-          var altT = altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
-          parts.push("transit " + hmStr(tz, tm) +
-                     " \u00b7 X " + (isFinite(airmass(altT)) ? airmass(altT).toFixed(2) : "\u2014"));
+        d.transits.forEach(function (tr) {
+          parts.push("transit " + hmStr(data.tz, tr.ms) +
+                     " \u00b7 X " + (isFinite(tr.x) ? tr.x.toFixed(2) : "\u2014"));
         });
       }
-      html += '<span class="sum-day">' + label + ":  " + parts.join(";  ") + "</span>";
+      html += '<span class="sum-day">' + data.days[di][2] + ":  " + parts.join(";  ") + "</span>";
     });
     html += "</div>";
   });
-  if (anyTarget) {
-    var anyOk = okArrays[0].slice();
-    okArrays.forEach(function (arr) {
-      for (var ai = 0; ai < arr.length; ai++) { if (arr[ai]) anyOk[ai] = true; }
-    });
-    var anyRuns = trueRuns(anyOk, startMs, step);
-    var anyH = 0;
-    anyRuns.forEach(function (run) { anyH += (run[1] - run[0]) / 3600000; });
-    var head = [];
-    totals.forEach(function (t) { head.push(htmlEscape(t.name) + " " + t.h.toFixed(1) + " h"); });
-    head.push("any target " + anyH.toFixed(1) + " h");
-    html = '<div class="sum-total"><b>Cumulative X \u2264 ' +
-           state.options.threshold.toFixed(2) + ':</b>  ' + head.join(";  ") + "</div>";
-  }
   if (!anyTarget) html = '<div class="sum-empty">Add a target to list its observing windows.</div>';
   box.innerHTML = html;
   $("summary-panel").style.display = "";
+}
+
+/**
+ * Build the observing-window CSV for download.
+ *
+ * One row per window: date, target, start, end (local HH:MM),
+ * duration_h, transit, transit_airmass. The transit columns are filled
+ * only on the first row of each target-day, from that day's first
+ * transit.
+ *
+ * @returns {?string} CSV text, or null when the time range is unparseable.
+ */
+function windowsCsv() {
+  var data = summaryData();
+  if (!data) return null;
+  var lines = ["date,target,start,end,duration_h,transit,transit_airmass"];
+  data.targets.forEach(function (t) {
+    t.days.forEach(function (d, di) {
+      for (var i = 0; i < d.runs.length; i++) {
+        var run = d.runs[i];
+        var transit = "", tx = "";
+        if (i === 0 && d.transits.length > 0) {
+          transit = hmStr(data.tz, d.transits[0].ms);
+          tx = isFinite(d.transits[0].x) ? d.transits[0].x.toFixed(2) : "";
+        }
+        lines.push([data.days[di][2], csvEsc(t.name), hmStr(data.tz, run[0]),
+                    hmStr(data.tz, run[1]),
+                    ((run[1] - run[0]) / 3600000).toFixed(2), transit, tx].join(","));
+      }
+    });
+  });
+  return lines.join("\n");
+}
+
+/**
+ * Quote a value for CSV.
+ *
+ * @param {*} s - Value to format.
+ * @returns {string} The value as text, quoted with doubled inner
+ *     quotes when it contains a comma, quote, or newline.
+ */
+function csvEsc(s) {
+  s = String(s);
+  return /["\n,]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 /**
@@ -2844,6 +2931,24 @@ $("png-btn").addEventListener("click", function () {
   document.body.appendChild(a);
   a.click();
   a.remove();
+});
+// Windows CSV: download the per-target observing windows as a CSV file.
+$("csv-btn").addEventListener("click", function () {
+  var csv = windowsCsv();
+  if (csv === null) {
+    setStatus("Fix the time range to export the windows.");
+    return;
+  }
+  var blob = new Blob([csv], { type: "text/csv" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "airmass-windows.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  setStatus("Windows CSV downloaded.");
 });
 // Reset: clear the saved state and return to the embedded workspace.
 $("reset-btn").addEventListener("click", function () {
