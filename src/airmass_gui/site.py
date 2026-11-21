@@ -120,8 +120,11 @@ button {
   cursor: pointer;
 }
 button:hover { background: #585b70; }
-.target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 22px;
+.target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 1fr 22px;
               gap: 0.3rem; margin: 0.25rem 0; align-items: center; }
+.target-row .info { font-size: 0.75rem; color: var(--fg-dim); cursor: pointer;
+                    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.target-row .info:hover { color: var(--fg); }
 .target-row .rm { border: none; background: transparent; color: var(--fg-dim);
                   font-size: 1.05rem; padding: 0; }
 .target-row .rm:hover { color: var(--error); }
@@ -423,12 +426,15 @@ function precessIcrsToTete(raDeg, decDeg, jd) {
  * Parse a SIMBAD ASCII object record.
  *
  * Name comes from the first non-C.D.S. line of the header; RA/Dec from
- * the ICRS coordinate line.
+ * the ICRS coordinate line; mag, spec and plx from the "Flux V",
+ * "Spectral type:" and "Parallax:" lines, null when a line is absent.
  *
  * @param {string} text - Response body for output.format=ASCII.
- * @returns {?{name: string, raDeg: number, dec: number}} J2000 name, RA
- *     in degrees and Dec in degrees, or null when no coordinates are
- *     present.
+ * @returns {?{name: string, raDeg: number, dec: number,
+ *     mag: ?number, spec: ?string, plx: ?number}} J2000 name, RA in
+ *     degrees and Dec in degrees, plus mag (V magnitude), spec
+ *     (spectral type) and plx (parallax in mas), or null when no
+ *     coordinates are present.
  */
 function simbadParseRecord(text) {
   var lines = String(text).split("\n");
@@ -439,13 +445,23 @@ function simbadParseRecord(text) {
     if (s !== "" && s.indexOf("C.D.S") !== 0) { name = s; break; }
   }
   var re = /Coordinates\(ICRS,ep=J2000,eq=2000\):\s+(\d+)\s+(\d+)\s+([\d.]+)\s+([+-]?\d+)\s+(\d+)\s+([\d.]+)/;
+  var reMag = /^Flux V\s*:\s*(-?[\d.]+)/;
+  var reSpec = /^Spectral type:\s*(\S+)/;
+  var rePlx = /^Parallax:\s*([\d.]+)/;
+  var mag = null, spec = null, plx = null;
+  for (i = 0; i < lines.length; i++) {
+    if (mag === null && (m = reMag.exec(lines[i]))) mag = parseFloat(m[1]);
+    if (spec === null && (m = reSpec.exec(lines[i]))) spec = m[1];
+    if (plx === null && (m = rePlx.exec(lines[i]))) plx = parseFloat(m[1]);
+  }
   for (i = 0; i < lines.length; i++) {
     m = re.exec(lines[i]);
     if (m) {
       var raDeg = (parseFloat(m[1]) + parseFloat(m[2]) / 60 + parseFloat(m[3]) / 3600) * 15;
       var dec = Math.abs(parseFloat(m[4])) + parseFloat(m[5]) / 60 + parseFloat(m[6]) / 3600;
       if (m[4].charAt(0) === "-") dec = -dec;
-      return { name: name || "Unknown", raDeg: raDeg, dec: dec };
+      return { name: name || "Unknown", raDeg: raDeg, dec: dec,
+               mag: mag, spec: spec, plx: plx };
     }
   }
   return null;
@@ -1187,6 +1203,24 @@ function decodeShareFragment(hash) {
   return s;
 }
 
+/**
+ * One-line Simbad info for a target, as shown on its edit row and in
+ * the chart tooltip.
+ *
+ * @param {{mag?: ?number, spec?: ?string, plx?: ?number}} obj - Target
+ *     record; mag is the V magnitude, spec the spectral type, plx the
+ *     parallax in mas; each is absent or null when the lookup had none.
+ * @returns {string} e.g. "V 0.03 \u00b7 A0V \u00b7 130.2 mas"; empty when
+ *     the target carries no Simbad info.
+ */
+function targetInfoText(obj) {
+  var parts = [];
+  if (isFinite(obj.mag)) parts.push("V " + obj.mag.toFixed(2));
+  if (obj.spec) parts.push(String(obj.spec));
+  if (isFinite(obj.plx)) parts.push(obj.plx.toFixed(1) + " mas");
+  return parts.join(" \u00b7 ");
+}
+
 /*JS-CORE-END*/
 
 // --------------------------------------------------------------- embedded data
@@ -1582,17 +1616,24 @@ function renderTargets() {
       '<input placeholder="Name" title="Name">' +
       '<input placeholder="RA (h:m:s / deg)" title="RA">' +
       '<input placeholder="Dec (d:m:s / deg)" title="Dec">' +
+      '<span class="info" title="Simbad info; click to clear"></span>' +
       '<button class="rm" title="Remove" type="button">&#215;</button>';
     var kids = row.children;
     kids[0].value = /^#[0-9a-fA-F]{6}$/.test(obj.color || "") ? obj.color : PALETTE[i % PALETTE.length];
     kids[1].value = obj.name || "";
     kids[2].value = obj.ra || "";
     kids[3].value = obj.dec || "";
+    kids[4].textContent = targetInfoText(obj);
     kids[0].addEventListener("input", function () { obj.color = this.value; afterTargetChange(); });
     kids[1].addEventListener("input", function () { obj.name = this.value; afterTargetChange(); });
     kids[2].addEventListener("input", function () { obj.ra = this.value; afterTargetChange(); });
     kids[3].addEventListener("input", function () { obj.dec = this.value; afterTargetChange(); });
     kids[4].addEventListener("click", function () {
+      delete obj.mag; delete obj.spec; delete obj.plx;
+      renderTargets();
+      afterTargetChange();
+    });
+    kids[5].addEventListener("click", function () {
       state.objects.splice(i, 1);
       renderTargets();
       afterTargetChange();
@@ -2430,8 +2471,10 @@ function updateTooltip(e) {
     }
     var tt = precessIcrsToTete(raH * 15, dec, jd);
     var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
+    var info = targetInfoText(obj);
     if (hd.alt <= 0) {
-      lines.push(name + ":  alt " + hd.alt.toFixed(1) + "\u00b0  (below horizon)");
+      lines.push(name + ":  alt " + hd.alt.toFixed(1) + "\u00b0  (below horizon)" +
+                 (info ? "  " + info : ""));
       return;
     }
     var q = parallacticAngle(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon);
@@ -2441,6 +2484,7 @@ function updateTooltip(e) {
     if (moon) {
       line += "  moon " + angularSep(tt.raDeg / 15, tt.dec, moon.raH, moon.dec).toFixed(1) + "\u00b0";
     }
+    line += info ? "  " + info : "";
     lines.push(line);
   });
   if (moon) {
@@ -2792,8 +2836,9 @@ function simbadFetchText(url) {
  * Look up a target name in SIMBAD, trying each mirror in turn.
  *
  * @param {string} name - Object name or identifier.
- * @returns {Promise<{name: string, raDeg: number, dec: number}>} Record
- *     per simbadParseRecord.
+ * @returns {Promise<{name: string, raDeg: number, dec: number,
+ *     mag: ?number, spec: ?string, plx: ?number}>} Record per
+ *     simbadParseRecord.
  * @throws {Error} When every mirror fails.
  */
 async function simbadLookup(name) {
@@ -2844,7 +2889,15 @@ $("simbad-btn").addEventListener("click", function () {
       $("new-name").value = record.name;
       $("new-ra").value = sexagesimalString(wrap360(record.raDeg) / 15, 2);
       $("new-dec").value = (record.dec < 0 ? "-" : "+") + sexagesimalString(Math.abs(record.dec), 2);
+      var before = state.objects.length;
       $("add-btn").click();
+      var added = state.objects[before];
+      if (added) {
+        if (isFinite(record.mag)) added.mag = record.mag;
+        if (record.spec) added.spec = record.spec;
+        if (isFinite(record.plx)) added.plx = record.plx;
+        saveState();
+      }
       setStatus("Added \u201c" + record.name + "\u201d from Simbad");
     })
     .catch(function (error) {

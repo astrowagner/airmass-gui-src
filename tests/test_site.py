@@ -44,7 +44,7 @@ CORE_FUNCTIONS = [
     "parseDec", "simbadParseRecord",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
-    "moonRaDec", "moonPhase", "angularSep",
+    "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -481,8 +481,17 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertEqual(got["name"], expected["name"])
         self.assertAlmostEqual(got["raDeg"], expected["ra"], delta=1e-9)
         self.assertAlmostEqual(got["dec"], expected["dec"], delta=1e-9)
+        self.assertAlmostEqual(got["mag"], float(expected["mag"]))
+        self.assertEqual(got["spec"], expected["spec"])
+        self.assertAlmostEqual(got["plx"], float(expected["plx"]))
         no_coords = "C.D.S.  -  SIMBAD4\n\nSome object\n----\nno coordinates here"
         self.assertIsNone(self._js(f"simbadParseRecord({json.dumps(no_coords)})"))
+        minimal = ("C.D.S.  -  SIMBAD4\n\nFaint star\n--------\n"
+                   "Coordinates(ICRS,ep=J2000,eq=2000): 01 02 03.00000  +10 11 12.0000\n")
+        got2 = self._js(f"simbadParseRecord({json.dumps(minimal)})")
+        self.assertIsNone(got2["mag"])
+        self.assertIsNone(got2["spec"])
+        self.assertIsNone(got2["plx"])
 
 
     def test_share_fragment_round_trip(self):
