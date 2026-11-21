@@ -1268,7 +1268,8 @@ function renderSummary() {
   var days = [];
   var dayStart = startMs;
   while (dayStart < endMs) {
-    var dayEnd = Math.min(nextLocalMidnight(tz, dayStart), endMs);
+    var dayEnd = Math.min(nextLocalMidnight(tz, dayStart + 1), endMs);
+    if (dayEnd - dayStart < 3600000) dayEnd = endMs; // degenerate tz data: ensure progress
     days.push([dayStart, dayEnd]);
     dayStart = dayEnd;
   }
@@ -1682,8 +1683,10 @@ function viewRange() {
   var t0 = Math.max(s, view.t0), t1 = Math.min(e, view.t1);
   if (t1 - t0 < MIN_WINDOW_MS) {
     var mid = 0.5 * (t0 + t1);
-    t0 = Math.max(s, mid - MIN_WINDOW_MS / 2);
-    t1 = Math.min(e, mid + MIN_WINDOW_MS / 2);
+    var nt0 = mid - MIN_WINDOW_MS / 2, nt1 = mid + MIN_WINDOW_MS / 2;
+    if (nt0 < s) { nt0 = s; nt1 = s + MIN_WINDOW_MS; }
+    else if (nt1 > e) { nt1 = e; nt0 = e - MIN_WINDOW_MS; }
+    t0 = Math.max(s, nt0); t1 = Math.min(e, nt1);
   }
   return { t0: t0, t1: t1 };
 }
@@ -1697,8 +1700,10 @@ function clampWindow(t0, t1) {
   t0 = Math.max(s, t0); t1 = Math.min(e, t1);
   if (t1 - t0 < MIN_WINDOW_MS) {
     var mid = 0.5 * (t0 + t1);
-    t0 = Math.max(s, mid - MIN_WINDOW_MS / 2);
-    t1 = Math.min(e, mid + MIN_WINDOW_MS / 2);
+    var nt0 = mid - MIN_WINDOW_MS / 2, nt1 = mid + MIN_WINDOW_MS / 2;
+    if (nt0 < s) { nt0 = s; nt1 = s + MIN_WINDOW_MS; }
+    else if (nt1 > e) { nt1 = e; nt0 = e - MIN_WINDOW_MS; }
+    t0 = Math.max(s, nt0); t1 = Math.min(e, nt1);
   }
   if (t0 === s && t1 === e) return null;
   return { t0: t0, t1: t1 };
