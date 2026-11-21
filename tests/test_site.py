@@ -42,7 +42,7 @@ CORE_FUNCTIONS = [
     "horizonCoords", "parallacticAngle", "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
     "parseDec", "simbadParseRecord",
-    "encodeShareFragment", "decodeShareFragment",
+    "encodeShareFragment", "decodeShareFragment", "htmlEscape",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -125,6 +125,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('"ew-resize"', self.page)
         self.assertIn("dblclick", self.page)
         self.assertIn("passive: false", self.page)
+
+    def test_workspace_controls(self):
+        for token in ('id="ws-select"', 'id="import-file"', 'id="png-btn"',
+                      'id="copylink-btn"', 'accept=".json,application/json"'):
+            self.assertIn(token, self.page)
+        self.assertIn("function htmlEscape(", self.core)
 
     def test_shareable_url(self):
         self.assertIn('<button id="copylink-btn"', self.page)
@@ -446,6 +452,18 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIsNone(self._js("decodeShareFragment('#x=1')"))
         self.assertIsNone(self._js("decodeShareFragment('#w=' + " + json.dumps(quote("[1,2]")) + ")"))
 
+
+    def test_html_escape(self):
+        cases = [
+            ("plain", "plain"),
+            ("<b>", "&lt;b&gt;"),
+            ('"q"', "&quot;q&quot;"),
+            ("o'clock", "o&#39;clock"),
+            ("a&b", "a&amp;b"),
+            ("</script><img src=x>", "&lt;/script&gt;&lt;img src=x&gt;"),
+        ]
+        for text, want in cases:
+            self.assertEqual(self._js("htmlEscape(" + json.dumps(text) + ")"), want)
 
 if __name__ == "__main__":
     unittest.main()
