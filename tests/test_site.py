@@ -43,6 +43,7 @@ CORE_FUNCTIONS = [
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
     "parseDec", "simbadParseRecord",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
+    "trueRuns", "transitTimes", "twilightEvents",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -131,6 +132,12 @@ class SitePageTests(unittest.TestCase):
                       'id="copylink-btn"', 'accept=".json,application/json"'):
             self.assertIn(token, self.page)
         self.assertIn("function htmlEscape(", self.core)
+
+    def test_windows_ui(self):
+        self.assertIn('<input id="windows-chk"', self.page)
+        self.assertIn('<input id="threshold"', self.page)
+        self.assertIn('<div id="summary">', self.page)
+        self.assertIn("function renderSummary()", self.page)
 
     def test_shareable_url(self):
         self.assertIn('<button id="copylink-btn"', self.page)
@@ -464,6 +471,80 @@ class JsCoreNumericTests(unittest.TestCase):
         ]
         for text, want in cases:
             self.assertEqual(self._js("htmlEscape(" + json.dumps(text) + ")"), want)
+
+    def test_true_runs(self):
+        rng = random.Random(7)
+        for trial in range(25):
+            n = rng.randint(0, 200)
+            ok = [rng.random() < 0.5 for _ in range(n)]
+            start = 1.7e12
+            step = 60000.0
+            got = json.loads(
+                self._js(f"JSON.stringify(trueRuns({json.dumps(ok)}, {start}, {step}))")
+            )
+            arr = np.array(ok, dtype=bool)
+            padded = np.concatenate(([False], arr, [False]))
+            idx = np.where(padded[:-1] != padded[1:])[0]
+            runs = []
+            for i in range(0, len(idx), 2):
+                a = start + idx[i] * step - step / 2
+                b = start + (idx[i + 1] - 1) * step + step / 2
+                runs.append((a, b))
+            self.assertEqual(len(got), len(runs), (trial, ok))
+            for (g, r) in zip(got, runs):
+                self.assertAlmostEqual(g[0], r[0], delta=1e-6)
+                self.assertAlmostEqual(g[1], r[1], delta=1e-6)
+
+    def test_transit_times(self):
+        start = Time("2026-11-20 00:00:00")
+        end = Time("2026-11-21 06:00:00")
+        start_ms = float(start.to_value("unix")) * 1000.0
+        end_ms = float(end.to_value("unix")) * 1000.0
+        # Reference: 60-s scan of the mean sidereal time, linear
+        # interpolation on the wrap.
+        grid = np.arange(start.mjd, end.mjd + 1e-9, 60.0 / 86400.0)
+        lst_deg = (
+            Time(grid, format="mjd")
+            .sidereal_time("mean", longitude=LBT.lon * u.deg)
+            .to_value(u.deg)
+        )
+        for ra_h in (0.1, 6.5, 12.3, 18.6, 23.9):
+            d = (lst_deg - ra_h * 15.0) % 360.0
+            idx = np.where((d[:-1] > 180.0) & (d[1:] <= 180.0))[0]
+            ref = []
+            for i in idx:
+                a0, a1 = float(d[i]), float(d[i + 1])
+                frac = (360.0 - a0) / ((360.0 - a0) + a1)
+                ref.append((float(grid[i]) + frac * (60.0 / 86400.0) - 40587.0) * 86400000.0)
+            got = json.loads(
+                self._js(f"JSON.stringify(transitTimes({ra_h}, {start_ms}, {end_ms}, {LBT.lon}))")
+            )
+            self.assertEqual(len(got), len(ref), ra_h)
+            for g, r in zip(got, ref):
+                self.assertAlmostEqual(g, r, delta=1000.0)  # 1 s
+
+    def test_twilight_events(self):
+        start = Time("2026-11-20 00:00:00")
+        end = Time("2026-11-21 00:00:00")
+        intervals = astro.sun_shading_intervals(LBT, start, end)
+        kinds = [k for (_a, _b, k) in intervals]
+        bounds = [float(start.to_value("mjd"))] + [float(b) for (_a, b, _k) in intervals]
+        start_ms = float(start.to_value("unix")) * 1000.0
+        end_ms = float(end.to_value("unix")) * 1000.0
+        for thr, above in (
+            (-6.0, {"day", "civil"}),
+            (-12.0, {"day", "civil", "nautical"}),
+        ):
+            ref = []
+            for i in range(len(kinds) - 1):
+                if (kinds[i] in above) != (kinds[i + 1] in above):
+                    ref.append((bounds[i + 1] - 40587.0) * 86400000.0)
+            got = json.loads(
+                self._js(f"JSON.stringify(twilightEvents({start_ms}, {end_ms}, {LBT.lat}, {LBT.lon}, {thr}))")
+            )
+            self.assertEqual(len(got), len(ref), thr)
+            for g, r in zip(got, ref):
+                self.assertAlmostEqual(g, r, delta=30000.0)  # 30 s
 
 if __name__ == "__main__":
     unittest.main()
