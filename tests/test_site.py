@@ -11,6 +11,7 @@ import random
 import re
 import tempfile
 import unittest
+from urllib.parse import quote, unquote
 from pathlib import Path
 
 import numpy as np
@@ -41,6 +42,7 @@ CORE_FUNCTIONS = [
     "horizonCoords", "parallacticAngle", "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
     "parseDec", "simbadParseRecord",
+    "encodeShareFragment", "decodeShareFragment",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -123,6 +125,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('"ew-resize"', self.page)
         self.assertIn("dblclick", self.page)
         self.assertIn("passive: false", self.page)
+
+    def test_shareable_url(self):
+        self.assertIn('<button id="copylink-btn"', self.page)
+        self.assertIn("function encodeShareFragment(", self.core)
+        self.assertIn("function decodeShareFragment(", self.core)
+        self.assertIn("history.replaceState", self.page)
 
     def test_title_uses_observatory_name(self):
         name = html_mod.escape(self.data["observatory"]["name"])
@@ -408,6 +416,35 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertAlmostEqual(got["dec"], expected["dec"], delta=1e-9)
         no_coords = "C.D.S.  -  SIMBAD4\n\nSome object\n----\nno coordinates here"
         self.assertIsNone(self._js(f"simbadParseRecord({json.dumps(no_coords)})"))
+
+
+    def test_share_fragment_round_trip(self):
+        doc = {
+            "observatory": {"name": "LBT (Large Binocular Telescope)", "lat": 31.76,
+                            "lon": -111.37, "elevation_m": 2283.0,
+                            "timezone": "America/Phoenix",
+                            "preset": "LBT (Large Binocular Telescope)"},
+            "objects": [{"name": "Vega & <friends>", "ra": "18:36:56.3", "dec": "+38:47:01",
+                         "color": "#89b4fa"}],
+            "time_range": {"start": "2026-11-20 00:00", "days": 2.5},
+            "options": {"threshold": 1.5, "windows": True, "moon": False,
+                        "civil": False, "nautical": False},
+        }
+        # JS-encode -> Python-decode
+        frag = self._js("encodeShareFragment(" + json.dumps(json.dumps(doc)) + ")")
+        self.assertTrue(frag.startswith("#w="))
+        self.assertEqual(json.loads(unquote(frag[3:])), doc)
+        # Python-encode -> JS-decode (round trip only: the alphabets of
+        # encodeURIComponent and quote(safe="") differ on !'()* )
+        got = json.loads(self._js(
+            "JSON.stringify(decodeShareFragment('#w=' + " + json.dumps(quote(json.dumps(doc), safe="")) + "))"
+        ))
+        self.assertEqual(got, doc)
+        # malformed fragments
+        self.assertIsNone(self._js("decodeShareFragment('')"))
+        self.assertIsNone(self._js("decodeShareFragment('#w=not json')"))
+        self.assertIsNone(self._js("decodeShareFragment('#x=1')"))
+        self.assertIsNone(self._js("decodeShareFragment('#w=' + " + json.dumps(quote("[1,2]")) + ")"))
 
 
 if __name__ == "__main__":
