@@ -3568,7 +3568,10 @@ function simbadFetchText(url) {
  * Requests cloud_cover and precipitation_probability hourly in the
  * observatory's time zone over the union of the workspace window and
  * the five days before today (for nowcast), clipped to open-meteo's
- * coverage of roughly 16 days on either side of today.
+ * forecast coverage: up to 16 days back and roughly 15 days forward.
+ * The forward clip leaves a one-day safety margin, because open-meteo
+ * computes its horizon from its own UTC clock, which is always at or
+ * ahead of the local clock of the supported (west-of-UTC) observatories.
  *
  * @param {Object} obs - Observatory with lat, lon, and timezone.
  * @returns {?{url: string, start: string, end: string}} The query URL
@@ -3581,12 +3584,12 @@ function weatherRequest(obs) {
   var p = tzParts(tz, Date.now());
   var today0 = wallToUtc(tz, p.year, p.month, p.day, 0, 0, 0);
   var coverLo = today0 - 16 * DAY;
-  var coverHi = today0 + 16 * DAY;
+  var coverHi = today0 + 14 * DAY;
   var wsStart = startUtcMs(), wsEnd = endUtcMs();
   if (wsStart == null) wsStart = today0;
   if (wsEnd == null) wsEnd = today0;
   var lo = Math.max(coverLo, Math.min(today0 - 5 * DAY, wsStart));
-  var hi = Math.min(coverHi, Math.max(today0 + 16 * DAY, wsEnd));
+  var hi = Math.min(coverHi, wsEnd);
   if (hi <= lo) return null;
   var date = function (q) {
     return q.year + "-" + pad2(q.month) + "-" + pad2(q.day);
@@ -3608,8 +3611,10 @@ function weatherRequest(obs) {
  *
  * @param {string} url - Fully formed open-meteo query URL.
  * @returns {Promise<Object>} Parsed JSON body.
- * @throws {Error} On timeout, network failure, non-2xx status, or a
- *     body without a usable hourly block.
+ * @throws {Error} On timeout, network failure, or a body without a
+ *     usable hourly block. For a non-2xx response, the open-meteo error
+ *     reason (e.g. a date range outside its coverage) is surfaced when
+ *     the error body carries one, otherwise the HTTP status code.
  */
 function fetchWeather(url) {
   var controller = new AbortController();
@@ -3619,14 +3624,17 @@ function fetchWeather(url) {
       throw new Error(error && error.name === "AbortError" ? "timed out" : error.message);
     })
     .then(function (response) {
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      return response.text();
-    })
-    .then(function (text) {
-      var body = JSON.parse(text);
-      if (!body || !body.hourly || !Array.isArray(body.hourly.time))
-        throw new Error("unexpected response shape");
-      return body;
+      var status = response.status;
+      return response.text().then(function (text) {
+        var body = null;
+        try { body = JSON.parse(text); } catch (err) { body = null; }
+        if (!response.ok)
+          throw new Error(body && body.error && body.reason
+              ? body.reason : "HTTP " + status);
+        if (!body || !body.hourly || !Array.isArray(body.hourly.time))
+          throw new Error("unexpected response shape");
+        return body;
+      });
     })
     .finally(function () { clearTimeout(timer); });
 }
