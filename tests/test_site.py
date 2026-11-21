@@ -146,6 +146,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function moonPhase(", self.core)
         self.assertIn("function angularSep(", self.core)
 
+    def test_twilight_lines_and_gestures_ui(self):
+        self.assertIn('<input id="civil-chk"', self.page)
+        self.assertIn('<input id="nautical-chk"', self.page)
+        self.assertIn('"touchstart"', self.page)
+        self.assertIn('"keydown"', self.page)
+
     def test_shareable_url(self):
         self.assertIn('<button id="copylink-btn"', self.page)
         self.assertIn("function encodeShareFragment(", self.core)
