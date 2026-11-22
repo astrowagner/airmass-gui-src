@@ -207,8 +207,8 @@ footer li { margin-bottom: 0.2rem; }
   <div class="panel">
     <h2>Time range (local)</h2>
     <div class="field-row">
-      <label class="field"><span>Start</span><input id="start" type="datetime-local"></label>
-      <button id="today-btn" title="Set the start to today at 00:00 (keeps the duration)">Today</button>
+      <label class="field"><span>Start</span><input id="start" type="text" placeholder="YYYY-MM-DD HH:MM" spellcheck="false"></label>
+      <button id="today-btn" title="Center the range on tonight's midnight (keeps the duration)">Today</button>
     </div>
     <label class="field"><span>Duration (days)</span><input id="days" type="number" step="0.1" min="0.25" max="30"></label>
   </div>
@@ -1979,7 +1979,7 @@ function syncAllControls() {
   $("lon").value = obs.lon;
   $("elev").value = obs.elevation_m;
   buildTzSelect();
-  $("start").value = String(state.time_range.start || "").replace(" ", "T");
+  $("start").value = String(state.time_range.start || "").replace("T", " ");
   $("days").value = state.time_range.days;
   $("windows-chk").checked = !!state.options.windows;
   $("threshold").value = state.options.threshold;
@@ -3803,13 +3803,17 @@ $("start").addEventListener("input", function () {
   saveState();
   scheduleRedraw();
 });
-// Today button: set the start stamp to today at 00:00 in the
-// observatory's time zone, keeping the duration, and commit it like
-// typing into the Start field.
+// Today button: center the range on tonight's midnight (the 00:00
+// that ends tonight, in the observatory's time zone), keeping the
+// duration, and commit it like typing into the Start field.
 $("today-btn").addEventListener("click", function () {
-  var p = tzParts(resolveTz(state.observatory.timezone), Date.now());
-  var s = p.year + "-" + pad2(p.month) + "-" + pad2(p.day) + " 00:00";
-  $("start").value = s.replace(" ", "T");
+  var tz = resolveTz(state.observatory.timezone);
+  var p = tzParts(tz, Date.now());
+  var midnight = wallToUtc(tz, p.year, p.month, p.day, 0, 0, 0) + 86400000;
+  var startMs = Math.round((midnight - state.time_range.days * 86400000 / 2) / 60000) * 60000;
+  var sp = tzParts(tz, startMs);
+  var s = sp.year + "-" + pad2(sp.month) + "-" + pad2(sp.day) + " " + pad2(sp.hour) + ":" + pad2(sp.minute);
+  $("start").value = s;
   state.time_range.start = s;
   invalidateView();
   saveState();

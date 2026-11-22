@@ -238,8 +238,9 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function drawNow(", self.page)
 
     def test_today_button(self):
-        """The time range panel offers a Today button next to the Start field."""
-        self.assertIn('id="start"', self.page)
+        """The Start field is plain 24-hour text and Today centers the range on tonight."""
+        self.assertIn('<input id="start" type="text"', self.page)
+        self.assertIn('placeholder="YYYY-MM-DD HH:MM"', self.page)
         self.assertIn('<button id="today-btn"', self.page)
         self.assertIn('$("today-btn").addEventListener("click"', self.page)
 
