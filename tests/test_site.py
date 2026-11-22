@@ -47,7 +47,7 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "simbadCooParse", "findingStarSize",
-    "findingGridStep",
+    "findingGridStep", "findingImageFov", "findingImageUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -309,10 +309,14 @@ class SitePageTests(unittest.TestCase):
         """No external scripts, styles, fonts, or images are referenced."""
         # The page must be self-contained: no external assets may be loaded.
         # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
-        # send Access-Control-Allow-Origin: *, so nothing is embedded.)
-        for token in ("<script src", "<link ", "@import", "url(", "<img",
+        # send Access-Control-Allow-Origin: *, so nothing is embedded. The
+        # SkyView finding-chart sky image is likewise a runtime opt-in
+        # fetch, set only when the user enables the finding chart, so an
+        # <img> without a static src is allowed.)
+        for token in ("<script src", "<link ", "@import", "url(",
                       "<iframe", "<object", "<embed"):
             self.assertNotIn(token, self.page)
+        self.assertNotIn("<img src", self.page)
 
     def test_no_unreplaced_tokens(self):
         """No unfilled __TOKEN__ placeholders remain."""
@@ -369,15 +373,27 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("s.options.snr = normalizeSnr(s.options.snr);", self.page)
 
     def test_finding_chart_ui(self):
-        """The Display panel offers a finding chart: checkbox, target and
-        radius selectors, a canvas, the Simbad coo lookup, and a
-        resizable panel."""
+        """The Display panel offers a finding chart: checkbox, target,
+        radius and survey selectors, a star-chart canvas and a SkyView
+        sky-image pane, the Simbad coo lookup, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
         self.assertIn('<select id="finding-target">', self.page)
         self.assertIn('<select id="finding-radius">', self.page)
         self.assertIn('<canvas id="finding-chart"></canvas>', self.page)
+        self.assertIn('<select id="finding-survey">', self.page)
+        self.assertIn('<img id="finding-img"', self.page)
+        self.assertIn('<canvas id="finding-img-overlay"></canvas>', self.page)
+        self.assertIn('id="finding-panes"', self.page)
+        self.assertIn('.finding-pane canvas, .finding-pane img', self.page)
+        self.assertIn('flex: 1 1 180px', self.page)
+        self.assertIn('function findingImageFov(', self.page)
+        self.assertIn('function findingImageUrl(', self.page)
+        self.assertIn('function updateFindingImage(', self.page)
+        self.assertIn('function drawFindingImageOverlay(', self.page)
+        self.assertIn('skyview_images.cgi', self.page)
+        self.assertIn('findingSurvey: "2MASS"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
         self.assertIn('function findingQueryUrl(', self.page)
