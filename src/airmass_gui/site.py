@@ -3284,23 +3284,23 @@ function draw(fast) {
         if (duskSpecs[ds].alt === ev.alt) spec = duskSpecs[ds];
       }
       var dx = X(ev.ms);
-      if (dx - lastLx < 13) continue; // keep the letters readable when events crowd
+      if (dx - lastLx < 16) continue; // keep the letters readable when events crowd
       lastLx = dx;
       ctx.fillStyle = spec.color;
       ctx.textAlign = "center";
       ctx.fillText(spec.letter, dx, plot.y + plot.h + 31);
-      var axx = dx + 6, ayy = plot.y + plot.h + 24;
+      var axx = dx + 7, ayy = plot.y + plot.h + 22, ah = 12;
       ctx.strokeStyle = spec.color;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.25;
       ctx.beginPath();
-      ctx.moveTo(axx, ev.dir > 0 ? ayy + 7 : ayy);
-      ctx.lineTo(axx, ev.dir > 0 ? ayy : ayy + 7);
+      ctx.moveTo(axx, ev.dir > 0 ? ayy + ah : ayy);
+      ctx.lineTo(axx, ev.dir > 0 ? ayy : ayy + ah);
       ctx.stroke();
       ctx.beginPath();
       if (ev.dir > 0) {
-        ctx.moveTo(axx - 2.5, ayy + 3); ctx.lineTo(axx, ayy); ctx.lineTo(axx + 2.5, ayy + 3);
+        ctx.moveTo(axx - 4, ayy + 6); ctx.lineTo(axx, ayy); ctx.lineTo(axx + 4, ayy + 6);
       } else {
-        ctx.moveTo(axx - 2.5, ayy + 4); ctx.lineTo(axx, ayy + 7); ctx.lineTo(axx + 2.5, ayy + 4);
+        ctx.moveTo(axx - 4, ayy + ah - 6); ctx.lineTo(axx, ayy + ah); ctx.lineTo(axx + 4, ayy + ah - 6);
       }
       ctx.stroke();
     }
