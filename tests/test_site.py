@@ -237,6 +237,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function zoomBy(", self.page)
         self.assertIn("function drawNow(", self.page)
 
+    def test_today_button(self):
+        """The time range panel offers a Today button next to the Start field."""
+        self.assertIn('id="start"', self.page)
+        self.assertIn('<button id="today-btn"', self.page)
+        self.assertIn('$("today-btn").addEventListener("click"', self.page)
+
     def test_shareable_url(self):
         """Share button and the encode/decode core functions are present."""
         self.assertIn('<button id="copylink-btn"', self.page)

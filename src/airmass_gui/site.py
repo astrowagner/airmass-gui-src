@@ -107,6 +107,9 @@ header p { margin: 0; color: var(--fg-dim); }
 label.field { display: flex; align-items: center; gap: 0.5rem; margin: 0.22rem 0;
               font-size: 0.83rem; color: var(--fg-dim); }
 label.field span { flex: 0 0 96px; }
+.field-row { display: flex; align-items: center; gap: 0.5rem; }
+.field-row label.field { flex: 1; }
+.field-row button { flex: none; }
 input, select {
   background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.24rem 0.4rem; font: inherit; font-size: 0.83rem;
@@ -203,7 +206,10 @@ footer li { margin-bottom: 0.2rem; }
   </div>
   <div class="panel">
     <h2>Time range (local)</h2>
-    <label class="field"><span>Start</span><input id="start" type="datetime-local"></label>
+    <div class="field-row">
+      <label class="field"><span>Start</span><input id="start" type="datetime-local"></label>
+      <button id="today-btn" title="Set the start to today at 00:00 (keeps the duration)">Today</button>
+    </div>
     <label class="field"><span>Duration (days)</span><input id="days" type="number" step="0.1" min="0.25" max="30"></label>
   </div>
   <div class="panel">
@@ -3793,6 +3799,18 @@ $("tz").addEventListener("change", onObsField);
 // Start stamp: store as 'YYYY-MM-DD HH:MM'; invalidate the zoomed view.
 $("start").addEventListener("input", function () {
   if (this.value) state.time_range.start = this.value.replace("T", " ");
+  invalidateView();
+  saveState();
+  scheduleRedraw();
+});
+// Today button: set the start stamp to today at 00:00 in the
+// observatory's time zone, keeping the duration, and commit it like
+// typing into the Start field.
+$("today-btn").addEventListener("click", function () {
+  var p = tzParts(resolveTz(state.observatory.timezone), Date.now());
+  var s = p.year + "-" + pad2(p.month) + "-" + pad2(p.day) + " 00:00";
+  $("start").value = s.replace(" ", "T");
+  state.time_range.start = s;
   invalidateView();
   saveState();
   scheduleRedraw();
