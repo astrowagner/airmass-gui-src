@@ -250,6 +250,19 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('"nwse-resize"', self.page)
         self.assertIn('"ns-resize"', self.page)
 
+    def test_panel_resize_handles(self):
+        """Every rounded panel and the chart box expose the manual resize
+        edges (right, bottom, corner) with matching cursors."""
+        for pid in ("panel-observatory", "panel-time", "panel-display",
+                    "panel-targets", "snr-panel", "panel-workspace",
+                    "summary-panel", "calendar-panel"):
+            self.assertIn('id="%s"' % pid, self.page)
+        self.assertIn("function makePanelResizable(", self.page)
+        self.assertIn("function applyPanelResize(", self.page)
+        self.assertIn("function applyChartResize(", self.page)
+        self.assertIn("function panelResizeMode(", self.page)
+        self.assertIn("overflow: auto", self.page)
+
     def test_today_button(self):
         """The Start field is plain 24-hour text and Today centers the range on tonight."""
         self.assertIn('<input id="start" type="text"', self.page)
