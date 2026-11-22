@@ -3287,13 +3287,14 @@ canvas.addEventListener("mousedown", function (e) {
   e.preventDefault();
 });
 
-// Mouse move: continue the in-progress drag, redrawing live.
+// Mouse move: continue the in-progress drag, redrawing live. A pan
+// moves the window against the drag, like grabbing the plot.
 window.addEventListener("mousemove", function (e) {
   if (!dragState || !lastPlot) return;
   var scale = (dragState.t1 - dragState.t0) / lastPlot.w;
   var dx = canvasPos(e).x - dragState.x0;
   if (dragState.mode === "pan") {
-    view = clampWindow(dragState.t0 + dx * scale, dragState.t1 + dx * scale);
+    view = clampWindow(dragState.t0 - dx * scale, dragState.t1 - dx * scale);
   } else if (dragState.mode === "left") {
     view = clampWindow(
       Math.min(dragState.t0 + dx * scale, dragState.t1 - MIN_WINDOW_MS), dragState.t1);
@@ -3461,14 +3462,15 @@ canvas.addEventListener("touchstart", function (e) {
   }
 }, { passive: false });
 
-// Touch move: pan or pinch-zoom the view, redrawing live.
+// Touch move: pan or pinch-zoom the view, redrawing live. A pan
+// moves the window against the drag, like grabbing the plot.
 canvas.addEventListener("touchmove", function (e) {
   if (!touchState || !lastPlot) return;
   if (touchState.mode === "pan" && e.touches.length === 1) {
     touchState.moved = true;
     var scale = (touchState.t1 - touchState.t0) / lastPlot.w;
     var dx = canvasPos(e.touches[0]).x - touchState.x0;
-    view = clampWindow(touchState.t0 + dx * scale, touchState.t1 + dx * scale);
+    view = clampWindow(touchState.t0 - dx * scale, touchState.t1 - dx * scale);
   } else if (touchState.mode === "pinch" && e.touches.length === 2) {
     var ratio = Math.max(0.2, Math.min(5, touchDist(e) / touchState.d0));
     var anchor = touchState.t0 + touchState.f0 * (touchState.t1 - touchState.t0);
