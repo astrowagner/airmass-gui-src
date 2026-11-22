@@ -2305,7 +2305,7 @@ var dragState = null; // in-progress edge/pan drag
 function sizeCanvas() {
   var dpr = window.devicePixelRatio || 1;
   var w = Math.max(320, canvas.clientWidth);
-  var h = Math.round(Math.min(620, Math.max(340, w * 0.495)));
+  var h = Math.round(Math.min(775, Math.max(425, w * 0.495 * 1.25)));
   canvas.style.height = h + "px";
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
