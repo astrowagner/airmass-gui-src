@@ -311,6 +311,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Workspaces: save named copies in this browser, import an exported JSON file, or download the chart as a PNG image (Export JSON keeps the desktop-app file shape).</li>
 <li>Now: when the current time falls in the displayed window, a red vertical line with a filled circle at the top of the chart marks it.</li>
 <li>Windows: the dashed line marks your airmass threshold; shaded bands show when each target is usable, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold.</li>
+<li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
 <li>S/N (panel hidden by default; enable it with the S/N estimate checkbox in the Options panel): with the panel on, each per-night window also lists, at the window midpoint, the single exposure that reaches the target S/N (or the S/N of the fixed exposure), from a V-band model: an 8.75&#215;10&#179; e&#8315;&sup1; cm&#8315;&sup2; s&#8315;&sup1; zero point, 21.9 mag arcsec&#8315;&sup2; of dark sky, a Moon term scaled by phase and altitude (Houdashelt et al. 2005), and 0.10 mag per airmass of extinction. The V magnitude is the target&rsquo;s (Simbad lookup or the V mag column); the defaults are editable in the S/N panel.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass and the tooltip adds its altitude, illumination fraction, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans, two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
@@ -1567,7 +1568,10 @@ function fieldRotationDeg(obj, t0, t1, latDeg, lonDeg) {
  * the first day of the first month), assigning each sample to its local
  * calendar month. For each month it reports the maximum altitude, the
  * time and airmass of the lowest sample above the horizon, and, for the
- * usable hours, the count, distinct local days, and first/last day.
+ * usable hours, the count, distinct local days, and first/last day. An
+ * hour is usable when the target is at or below the threshold airmass
+ * while the sky is dark (sun altitude at or below -12 deg,
+ * astronomical night).
  *
  * @param {function(number): {raDeg: number, dec: number}} coords -
      J2000 coordinates of the target at each sample time (objCoords
@@ -1618,7 +1622,7 @@ function annualCalendarMonths(coords, tz, lat, lon, monthStartMs, threshold) {
       months[b].minAir = x;
       months[b].bestMs = ms;
     }
-    if (x <= threshold) {
+    if (x <= threshold && sunAltitude(jd, lat, lon) <= -12) {
       months[b].hours += 1;
       if (nights[b][p.day] === undefined) {
         nights[b][p.day] = true;
@@ -2659,9 +2663,9 @@ function calendarData() {
  * first-to-last usable month, and the year's lowest-airmass sample
  * above the horizon as local date/time and airmass; or no usable
  * month; or never rises) above a 12-row table: usable hours, usable
- * nights (distinct local days), span of usable local days, and the
- * local time and airmass of the month's lowest-airmass sample above
- * the horizon.
+ * nights (distinct local days with at least one usable hour), usable
+ * hours per night, span of usable local days, and the local time and
+ * airmass of the month's lowest-airmass sample above the horizon.
  *
  * @returns {undefined} Nothing returned.
  *
@@ -2685,9 +2689,9 @@ function renderCalendar() {
     html = '<div class="cal-empty">Add a target to see its annual coverage.</div>';
   } else {
     html += '<div class="cal-note">Sampled once per hour; usable = X &#8804; ' +
-            data.threshold.toFixed(2) +
-            ". Best hour is the local time of the month's lowest-airmass " +
-            "sample above the horizon.</div>";
+            data.threshold.toFixed(2) + " while the sky is dark (sun " +
+            "&#8804; -12&#176;). Best hour is the local time of the " +
+            "month's lowest-airmass sample above the horizon.</div>";
   }
   var tz = resolveTz(state.observatory.timezone);
   data.targets.forEach(function (t) {
@@ -2719,8 +2723,8 @@ function renderCalendar() {
     html += '<div class="cal-target"><b>' + htmlEscape(t.name) + "</b> " +
             line + "</div>";
     html += '<table class="cal-table"><tr><th>Month</th><th>Usable h</th>' +
-            "<th>Usable nights</th><th>Usable days</th><th>Best hour</th>" +
-            "<th>Best X</th></tr>";
+            "<th>Usable nights</th><th>h/night</th><th>Usable days</th>" +
+            "<th>Best hour</th><th>Best X</th></tr>";
     t.months.forEach(function (m) {
       var days = m.firstDay === null ? "\u2014" :
         (m.firstDay === m.lastDay ? String(m.firstDay) :
@@ -2730,9 +2734,11 @@ function renderCalendar() {
         var bp = tzParts(tz, m.bestMs);
         hour = pad2(bp.hour) + ":" + pad2(bp.minute);
       }
+      var perNight = m.nights === 0 ? "\u2014" : (m.hours / m.nights).toFixed(1);
       html += "<tr><td>" + m.label + "</td><td>" + m.hours.toFixed(1) +
               "</td><td>" + (m.nights === 0 ? "\u2014" : m.nights) +
-              "</td><td>" + days + "</td><td>" + hour + "</td><td>" +
+              "</td><td>" + perNight + "</td><td>" + days + "</td><td>" +
+              hour + "</td><td>" +
               (isFinite(m.minAir) ? m.minAir.toFixed(4) : "\u2014") +
               "</td></tr>";
     });

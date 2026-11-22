@@ -484,12 +484,14 @@ class JsCoreNumericTests(unittest.TestCase):
 
     def test_annual_calendar(self):
         """annualCalendarMonths matches astropy: max alt to 0.1 deg,
-        hours to 2 h, best airmass to 0.01 and its time to 3 h, and
-        usable nights to 1 day."""
+        usable hours to 2 h, best airmass to 0.01 and its time to 3 h,
+        and usable nights to 1 day (usable = X <= 1.7 while the sun is
+        at or below -12 deg)."""
         # Reference: sample the refraction-free astropy altitude on the
         # same UTC hour grid the core uses (tz 'UTC'), taking the
         # per-month max altitude and counting the hours with X <=
-        # threshold, where X is the core's own kastyAir so only the
+        # threshold during astronomical night (get_sun altitude <=
+        # -12 deg), where X is the core's own kastyAir so only the
         # geometry is cross-checked. The one-hour sampling of the
         # transit phase sets the 0.1 deg max-altitude tolerance.
         # annualCalendarMonths calls tzParts, an Intl-based helper from
@@ -558,7 +560,9 @@ class JsCoreNumericTests(unittest.TestCase):
                 if x < ref_best_x:
                     ref_best_x = x
                     ref_best_ms = ms
-                if x <= 1.7:
+                dark = get_sun(t).transform_to(
+                    AltAz(obstime=t, location=loc)).alt.deg <= -12
+                if x <= 1.7 and dark:
                     ref_hours += 1
                     day = int(t.isot[8:10])
                     ref_nights.add(day)
