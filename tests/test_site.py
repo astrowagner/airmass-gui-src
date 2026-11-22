@@ -175,11 +175,14 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function sunEvents(", self.core)
 
     def test_footer_credit_and_details(self):
-        """Footer info lives in an 'Extra details' dropdown; the credit links the site."""
+        """Footer info lives in an 'Extra details' dropdown; the credit names author, site, source, and license."""
         self.assertIn('<details id="extra-details">\n<summary>Extra details</summary>\n<ul>', self.page)
         self.assertIn("</ul>\n</details>", self.page)
         self.assertIn('class="credit"', self.page)
+        self.assertIn("K. Wagner (UArizona)", self.page)
         self.assertIn('<a href="http://kevinwagner.space">kevinwagner.space</a>', self.page)
+        self.assertIn('href="https://github.com/astrowagner/airmass-gui-src"', self.page)
+        self.assertIn("MIT", self.page)
 
     def test_shareable_url(self):
         """Share button and the encode/decode core functions are present."""

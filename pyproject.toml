@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "airmass-gui"
 version = "0.1.0"
 description = "GUI for creating airmass (X) charts of astronomical targets from an observatory"
+license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

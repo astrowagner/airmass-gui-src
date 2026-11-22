@@ -289,7 +289,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Touch and keys: a single finger pans, two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
 </details>
-<p class="credit">Airmass chart by Kevin Wagner &middot; <a href="http://kevinwagner.space">kevinwagner.space</a></p>
+<p class="credit">Airmass chart by K. Wagner (UArizona) &middot; <a href="http://kevinwagner.space">kevinwagner.space</a> &middot; <a href="https://github.com/astrowagner/airmass-gui-src">source</a> &middot; <a href="https://github.com/astrowagner/airmass-gui-src/blob/main/LICENSE">MIT licensed</a></p>
 </footer>
 </div>
 <script>

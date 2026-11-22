@@ -114,3 +114,7 @@ work with any JSON workspace file.
   (matplotlib >= 3.9).
 - LBT default: 32 deg 26' 34" N, 111 deg 09' 18" W, 2400 m, America/Phoenix.
 - Tests: `python -m unittest discover -s tests -v`
+
+## License
+
+MIT — see [LICENSE](LICENSE).
