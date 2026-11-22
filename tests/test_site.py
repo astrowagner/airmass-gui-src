@@ -45,7 +45,7 @@ CORE_FUNCTIONS = [
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
-    "objCoords", "horizonsParse",
+    "objCoords", "horizonsParse", "fieldRotationDeg",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -96,6 +96,49 @@ def _embedded_json(page: str, name: str):
             if depth == 0:
                 return json.loads(page[start : i + 1])
     raise AssertionError(f"unbalanced JSON literal for {name}")
+
+
+def _enu_parallactic_deg(hour_angle_rad: float, lat: float, dec: float) -> float:
+    """Parallactic angle in degrees from the object's east-north-up frame.
+
+    The angle at the object between the vertical circle and the hour
+    circle, from east-north-up unit vectors: the object direction u, the
+    zenith z, and the celestial pole pole = (0, cos lat, sin lat).
+    q = atan2(u . (t_vert x t_hour), t_vert . t_hour), where t_vert and
+    t_hour are the unit tangents of the vertical and hour circles at the
+    object.
+
+    Parameters
+    ----------
+    hour_angle_rad : float
+        Hour angle H of the object, in radians.
+    lat : float
+        Observer latitude, in degrees.
+    dec : float
+        Object declination, in degrees.
+
+    Returns
+    -------
+    float
+        Parallactic angle q, in degrees.
+    """
+    H = hour_angle_rad
+    phi = math.radians(lat)
+    dec_r = math.radians(dec)
+    cd, sd = math.cos(dec_r), math.sin(dec_r)
+    sp, cp = math.sin(phi), math.cos(phi)
+    ch, sh = math.cos(H), math.sin(H)
+    u = np.array([-cd * sh, sd * cp - cd * sp * ch, sd * sp + cd * cp * ch])
+    u /= np.linalg.norm(u)
+    z = np.array([0.0, 0.0, 1.0])
+    pole = np.array([0.0, cp, sp])
+    t_vert = z - np.dot(z, u) * u
+    t_vert /= np.linalg.norm(t_vert)
+    t_hour = pole - np.dot(pole, u) * u
+    t_hour /= np.linalg.norm(t_hour)
+    return math.degrees(
+        math.atan2(np.dot(u, np.cross(t_vert, t_hour)), np.dot(t_vert, t_hour))
+    )
 
 
 class SitePageTests(unittest.TestCase):
@@ -387,22 +430,7 @@ class JsCoreNumericTests(unittest.TestCase):
                 continue  # near zenith: the angle is ill-conditioned
             ra_h = rng.uniform(0.0, 24.0)
             H = math.radians((self._js(f"lstDeg({jd}, {lon})") - ra_h * 15.0) % 360.0)
-            phi = math.radians(lat)
-            dec_r = math.radians(dec)
-            cd, sd = math.cos(dec_r), math.sin(dec_r)
-            sp, cp = math.sin(phi), math.cos(phi)
-            ch, sh = math.cos(H), math.sin(H)
-            u = np.array([-cd * sh, sd * cp - cd * sp * ch, sd * sp + cd * cp * ch])
-            u /= np.linalg.norm(u)
-            z = np.array([0.0, 0.0, 1.0])
-            pole = np.array([0.0, cp, sp])
-            t_vert = z - np.dot(z, u) * u
-            t_vert /= np.linalg.norm(t_vert)
-            t_hour = pole - np.dot(pole, u) * u
-            t_hour /= np.linalg.norm(t_hour)
-            q_ref = math.degrees(
-                math.atan2(np.dot(u, np.cross(t_vert, t_hour)), np.dot(t_vert, t_hour))
-            )
+            q_ref = _enu_parallactic_deg(H, lat, dec)
             got = self._js(f"parallacticAngle({ra_h}, {dec}, {jd}, {lat}, {lon})")
             dq = abs(got - q_ref) % 360.0
             self.assertLessEqual(
@@ -410,6 +438,42 @@ class JsCoreNumericTests(unittest.TestCase):
             )
             checked += 1
         self.assertGreaterEqual(checked, 30)
+
+    def test_field_rotation(self):
+        """fieldRotationDeg matches the unwrapped ENU parallactic angle to 0.05 deg."""
+        # Reference: sum the unwrapped (+/-180 deg) increments of the
+        # parallactic angle sampled on the same 15-minute grid (both
+        # endpoints included) that the core uses, and take the absolute
+        # value of the total. The hour angle is LST - RA, both from
+        # astropy's apparent sidereal time and true equator of date, so
+        # the reference is independent of the core's GMST and precession.
+        # The core omits nutation, so 0.05 deg is allowed.
+        ms0 = int(round((Time("2026-11-21 22:00:00").jd - 2440587.5) * 86400000))
+        ms1 = int(round((Time("2026-11-22 08:00:00").jd - 2440587.5) * 86400000))
+        loc = astro.location(LBT)
+        prev = None
+        expected = 0.0
+        for ms in range(ms0, ms1 + 1, 900000):
+            t = Time(ms / 1000.0, format="unix")
+            lst = (
+                t.sidereal_time("apparent", longitude=LBT.lon * u.deg)
+                .to_value(u.hourangle)
+                * 15.0
+            )
+            tete = VEGA.transform_to(TETE(obstime=t))
+            H = math.radians(
+                (lst - tete.ra.to_value(u.hourangle) * 15.0) % 360.0
+            )
+            q = _enu_parallactic_deg(H, LBT.lat, tete.dec.deg)
+            if prev is not None:
+                expected += (q - prev + 180.0) % 360.0 - 180.0
+            prev = q
+        expected = abs(expected)
+        got = self._js(
+            f"fieldRotationDeg({{ra: '18:36:56.30142', dec: '+38:47:01.4506'}}, "
+            f"{ms0}, {ms1}, {LBT.lat}, {LBT.lon})"
+        )
+        self.assertAlmostEqual(got, expected, delta=0.05)
 
     def test_annual_calendar(self):
         """annualCalendarMonths matches astropy: max alt to 0.1 deg, hours to 2 h."""
