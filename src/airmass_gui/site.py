@@ -1856,7 +1856,7 @@ function findingImageFov(sizePx, radiusArcmin) {
  * @param {number} sizePx - Star-chart canvas side, px.
  * @param {number} radiusArcmin - Search radius, arcmin.
  * @returns {string} SkyView skyview_images.cgi URL for a 1000-px
- *     square, best exposure, PNG.
+ *     square PNG.
  */
 function findingImageUrl(survey, raDeg, decDeg, sizePx, radiusArcmin) {
   var n = 1000;
@@ -1867,7 +1867,7 @@ function findingImageUrl(survey, raDeg, decDeg, sizePx, radiusArcmin) {
          "&dec=" + decDeg.toFixed(4) +
          "&size=" + n +
          "&pixel=" + pixel.toFixed(4) +
-         "&exposure=best&fileformat=PNG&restore=true";
+         "&fileformat=PNG";
 }
 
 /*JS-CORE-END*/
@@ -5191,8 +5191,12 @@ var findingImgSeq = 0;   // token that invalidates stale sky-image loads
  *
  * The image (findingImageUrl) covers the same field of view as the
  * star-chart canvas; once it loads, drawFindingImageOverlay marks the
- * targets on it. A findingImgSeq token discards an image that a newer
- * center or survey supersedes before it arrives.
+ * targets on it. The image is fetched with fetch() first so a SkyView
+ * failure reports its real reason (HTTP status and message, with a
+ * link to the request URL); when the fetch itself is blocked (e.g. by
+ * CORS) it falls back to a plain <img> load, which needs no CORS.
+ * A findingImgSeq token discards an image that a newer center or
+ * survey supersedes before it arrives.
  *
  * @param {Object} center - Chart center {raDeg, dec} in degrees.
  * @param {number} radiusArcmin - Search radius, arcmin.
@@ -5208,18 +5212,49 @@ function updateFindingImage(center, radiusArcmin, label, centerIdx) {
   var seq = ++findingImgSeq;
   var sizePx = findingCanvasSize();
   var survey = $("finding-survey").value || "2MASS";
-  imgStatus.textContent = "Loading " + survey + "\u2026";
-  img.onload = function () {
+  var url = findingImageUrl(survey, center.raDeg, center.dec, sizePx,
+                            radiusArcmin);
+  imgStatus.textContent = "Loading " + survey + " image\u2026";
+  var ready = function () {
     if (seq !== findingImgSeq) return;
     imgStatus.textContent = "";
     drawFindingImageOverlay(center, radiusArcmin, label, centerIdx, sizePx);
   };
-  img.onerror = function () {
+  var report = function (msg) {
     if (seq !== findingImgSeq) return;
-    imgStatus.textContent = "Sky image unavailable from SkyView";
+    imgStatus.textContent = msg;
+    var a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.textContent = "open the request URL";
+    imgStatus.appendChild(a);
   };
-  img.src = findingImageUrl(survey, center.raDeg, center.dec, sizePx,
-                            radiusArcmin);
+  fetch(url)
+    .then(function (resp) {
+      if (!resp.ok)
+        return resp.text().then(function (t) {
+          throw new Error("SkyView HTTP " + resp.status +
+            (t ? ": " + String(t).replace(/\s+/g, " ").slice(0, 140) : ""));
+        });
+      return resp.blob().then(function (b) {
+        if (seq !== findingImgSeq) return;
+        if (!b || b.type.indexOf("image") !== 0)
+          throw new Error("SkyView response is not an image (" +
+                          (b && b.type || "unknown type") + ")");
+        img.src = URL.createObjectURL(b);
+        ready();
+      });
+    }, function () {
+      img.src = url;
+      img.onload = ready;
+      img.onerror = function () {
+        report("Sky image unavailable from SkyView");
+      };
+    })
+    .catch(function (error) {
+      report(error && error.message ? error.message
+                                    : "Sky image unavailable from SkyView");
+    });
 }
 
 /**
