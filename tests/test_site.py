@@ -228,7 +228,8 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("MIT", self.page)
 
     def test_chart_navigation_controls(self):
-        """The chart has a horizontal scrollbar and zoom-in/out/reset buttons."""
+        """The chart has a horizontal scrollbar, zoom buttons, and a
+        bottom-edge / bottom-right-corner resize."""
         self.assertIn('<div class="hscroll" id="hscroll"', self.page)
         self.assertIn('id="hscroll-thumb"', self.page)
         for btn in ("zoom-in", "zoom-out", "zoom-reset"):
@@ -236,6 +237,10 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function updateHScroll(", self.page)
         self.assertIn("function zoomBy(", self.page)
         self.assertIn("function drawNow(", self.page)
+        self.assertIn('chartBox.addEventListener("mousedown"', self.page)
+        self.assertIn("function chartResizeMode(", self.page)
+        self.assertIn('"nwse-resize"', self.page)
+        self.assertIn('"ns-resize"', self.page)
 
     def test_today_button(self):
         """The Start field is plain 24-hour text and Today centers the range on tonight."""
