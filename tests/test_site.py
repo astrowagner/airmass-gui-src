@@ -46,6 +46,8 @@ CORE_FUNCTIONS = [
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
+    "gnomonicProject", "simbadCooParse", "findingStarSize",
+    "findingGridStep",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -365,6 +367,23 @@ class SitePageTests(unittest.TestCase):
             self.assertIn('<input id="snr-%s"' % field, self.page)
         self.assertIn("state.options.snr[key] = v", self.page)
         self.assertIn("s.options.snr = normalizeSnr(s.options.snr);", self.page)
+
+    def test_finding_chart_ui(self):
+        """The Display panel offers a finding chart: checkbox, target and
+        radius selectors, a canvas, the Simbad coo lookup, and a
+        resizable panel."""
+        self.assertIn(
+            '<input id="finding-chk" type="checkbox">', self.page)
+        self.assertIn('<div class="panel" id="finding-panel"', self.page)
+        self.assertIn('<select id="finding-target">', self.page)
+        self.assertIn('<select id="finding-radius">', self.page)
+        self.assertIn('<canvas id="finding-chart"></canvas>', self.page)
+        self.assertIn('function simbadCooLookup(', self.page)
+        self.assertIn('function drawFindingChart(', self.page)
+        self.assertIn('function findingQueryUrl(', self.page)
+        self.assertIn('"finding-panel"', self.page)
+        self.assertIn("finding: false", self.page)
+        self.assertIn("Finding chart", self.page)
 
     def test_script_injection_is_neutralized(self):
         """A hostile object name cannot open a second script tag."""
