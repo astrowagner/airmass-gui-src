@@ -228,10 +228,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("MIT", self.page)
 
     def test_chart_navigation_controls(self):
-        """The chart has a horizontal scrollbar, zoom buttons, and a
-        bottom-edge / bottom-right-corner resize."""
+        """The chart has a horizontal scrollbar, zoom buttons, a bottom-edge
+        / bottom-right-corner resize, and an HTML legend row under the canvas."""
         self.assertIn('<div class="hscroll" id="hscroll"', self.page)
         self.assertIn('id="hscroll-thumb"', self.page)
+        self.assertIn('<div id="legend"', self.page)
+        self.assertIn("function renderLegend(", self.page)
         for btn in ("zoom-in", "zoom-out", "zoom-reset"):
             self.assertIn('id="%s"' % btn, self.page)
         self.assertIn("function updateHScroll(", self.page)

@@ -563,13 +563,14 @@ async function __main() {
   hours.forEach(function (h) { if (h.ms >= s && h.ms <= e) inRange++; });
   if (inRange < 48) throw new Error("too few in-window hours: " + inRange);
 
-  var __texts = [];
-  var __ft = __ctx.fillText;
-  __ctx.fillText = function (s) { __texts.push(String(s)); return __ft.apply(this, arguments); };
   draw();
-  __ctx.fillText = __ft;
-  if (__texts.join("\u0001").indexOf("Cloud cover (fill height = %)") === -1)
-    throw new Error("legend missing the cloud cover entry");
+  var lg = $("legend").__innerHTML;
+  if (lg.indexOf("Cloud cover (fill height = %)") === -1)
+    throw new Error("legend missing the cloud cover entry: " + lg);
+  if (lg.indexOf('class="sw"') === -1)
+    throw new Error("legend swatch missing: " + lg);
+  if (lg.indexOf("opacity:0.45") === -1)
+    throw new Error("legend swatch missing cloud-cover alpha: " + lg);
   var status = String($("status").textContent);
   if (status !== "") throw new Error("weather fetch set status: " + status);
   var sum = $("summary").innerHTML;
