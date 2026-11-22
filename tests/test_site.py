@@ -411,6 +411,73 @@ class JsCoreNumericTests(unittest.TestCase):
             checked += 1
         self.assertGreaterEqual(checked, 30)
 
+    def test_annual_calendar(self):
+        """annualCalendarMonths matches astropy: max alt to 0.1 deg, hours to 2 h."""
+        # Reference: sample the refraction-free astropy altitude on the
+        # same UTC hour grid the core uses (tz 'UTC'), taking the
+        # per-month max altitude and counting the hours with X <=
+        # threshold, where X is the core's own kastyAir so only the
+        # geometry is cross-checked. The one-hour sampling of the
+        # transit phase sets the 0.1 deg max-altitude tolerance.
+        # annualCalendarMonths calls tzParts, an Intl-based helper from
+        # the UI layer (outside the JS core), so define a UTC-only
+        # stand-in in the interpreter: the grid's tz is UTC, and the
+        # Date UTC parts agree with Intl's UTC parts.
+        self._js(
+            "function tzParts(tz, ms) {\n"
+            '  if (tz !== "UTC") throw new Error("test tzParts is UTC only");\n'
+            "  var d = new Date(ms);\n"
+            "  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1,\n"
+            "           day: d.getUTCDate(), hour: d.getUTCHours(),\n"
+            "           minute: d.getUTCMinutes(), second: d.getUTCSeconds() };\n"
+            "}"
+        )
+        ms0 = int(round((Time("2026-03-01 00:00:00").jd - 2440587.5) * 86400000))
+        got = json.loads(
+            self._js(
+                f"JSON.stringify(annualCalendarMonths(function (ms) {{ return "
+                f"{{raDeg: {VEGA.ra.deg}, dec: {VEGA.dec.deg}}}; }}, "
+                f"'UTC', {LBT.lat}, {LBT.lon}, {ms0}, 1.7))"
+            )
+        )
+        self.assertEqual(len(got), 12)
+        self.assertEqual(got[0]["label"], "Mar 2026")
+        self.assertEqual(got[11]["label"], "Feb 2027")
+        loc = astro.location(LBT)
+        for b in range(12):
+            m = got[b]
+            if m["hours"] == 0:
+                self.assertIsNone(m["firstDay"])
+                self.assertIsNone(m["lastDay"])
+            else:
+                self.assertGreaterEqual(m["firstDay"], 1)
+                self.assertLessEqual(m["firstDay"], m["lastDay"])
+                self.assertGreaterEqual(m["lastDay"] - m["firstDay"] + 1,
+                                        math.ceil(m["hours"] / 24.0))
+        # Month 0 in full: max altitude, usable-hour count, and the
+        # first/last usable day (UTC days, since the grid's tz is UTC).
+        ref_alt = -math.inf
+        ref_hours = 0
+        ref_first = ref_last = None
+        for k in range(744):
+            ms = ms0 + k * 3600000
+            t = Time(ms / 1000.0, format="unix")
+            alt = VEGA.transform_to(AltAz(obstime=t, location=loc)).alt.deg
+            if alt > ref_alt:
+                ref_alt = alt
+            x = self._js(f"kastyAir({alt})")
+            if alt > 0 and x <= 1.7:
+                ref_hours += 1
+                day = int(t.isot[8:10])
+                if ref_first is None:
+                    ref_first = day
+                ref_last = day
+        m0 = got[0]
+        self.assertAlmostEqual(m0["maxAlt"], ref_alt, delta=0.1)
+        self.assertAlmostEqual(m0["hours"], ref_hours, delta=2.0)
+        self.assertAlmostEqual(m0["firstDay"], ref_first, delta=1.0)
+        self.assertAlmostEqual(m0["lastDay"], ref_last, delta=1.0)
+
     def test_precess(self):
         """precessIcrsToTete matches astropy TETE at nutation level (~0.02 deg)."""
         # Nutation is omitted, so the residuals are nutation-level. RA is

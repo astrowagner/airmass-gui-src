@@ -1510,6 +1510,67 @@ function targetInfoText(obj) {
   return parts.join(" \u00b7 ");
 }
 
+/**
+ * Twelve monthly observing summaries for one target, on a 1-hour grid.
+ *
+ * Samples the target's altitude once per hour (UTC) starting at local
+ * midnight on the first day of the month containing monthStartMs,
+ * through the next eleven months (a full year of samples). For each
+ * month it reports the maximum
+ * altitude, the minimum airmass while above the horizon, and the number
+ * of sample hours with airmass at or below the threshold.
+ *
+ * @param {function(number): {raDeg: number, dec: number}} coords -
+     J2000 coordinates of the target at each sample time (objCoords
+     for a state target; a constant for a static target).
+ * @param {string} tz - IANA time zone name.
+ * @param {number} lat - Observatory latitude in degrees.
+ * @param {number} lon - Observatory longitude in degrees.
+ * @param {number} monthStartMs - Epoch ms of local midnight on the
+ *     first day of the first month.
+ * @param {number} threshold - Max airmass X for a "usable" hour.
+ * @returns {Array} 12 entries, first the month of monthStartMs, each
+ *     {label ("Mon YYYY"), maxAlt (degrees; -Infinity when the target
+ *     never rises), minAir (airmass; Infinity when it never rises),
+ *     hours (float, count of sample hours with X <= threshold),
+ *     firstDay (local day of the first usable hour, null when the
+ *     month has none), lastDay (local day of the last usable hour)}.
+ */
+function annualCalendarMonths(coords, tz, lat, lon, monthStartMs, threshold) {
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var p0 = tzParts(tz, monthStartMs);
+  var months = [], first = [], k, ms, p, b;
+  for (b = 0; b < 12; b++) {
+    months.push({ label: "", maxAlt: -Infinity, minAir: Infinity, hours: 0,
+                  firstDay: null, lastDay: null });
+  }
+  for (k = 0; k < 8784; k++) {
+    ms = monthStartMs + k * 3600000;
+    p = tzParts(tz, ms);
+    b = (p.year * 12 + p.month) - (p0.year * 12 + p0.month);
+    if (b < 0 || b > 11) continue;
+    var jd = jdFromUtcMs(ms);
+    var c = coords(ms);
+    var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
+    var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, lat, lon);
+    if (first[b] === undefined) {
+      first[b] = true;
+      months[b].label = MONTHS[p.month - 1] + " " + p.year;
+    }
+    if (hd.alt > months[b].maxAlt) months[b].maxAlt = hd.alt;
+    if (hd.alt <= 0) continue;
+    var x = airmass(hd.alt);
+    if (x < months[b].minAir) months[b].minAir = x;
+    if (x <= threshold) {
+      months[b].hours += 1;
+      if (months[b].firstDay === null) months[b].firstDay = p.day;
+      months[b].lastDay = p.day;
+    }
+  }
+  return months;
+}
+
 /*JS-CORE-END*/
 
 // --------------------------------------------------------------- embedded data
@@ -2434,60 +2495,6 @@ function renderSummary() {
   $("summary-panel").style.display = "";
 }
 
-/**
- * Twelve monthly observing summaries for one target, on a 1-hour grid.
- *
- * Samples the target's altitude once per hour (UTC) starting at local
- * midnight on the first day of the month containing monthStartMs,
- * through the next eleven months (a full year of samples). For each
- * month it reports the maximum
- * altitude, the minimum airmass while above the horizon, and the number
- * of sample hours with airmass at or below the threshold.
- *
- * @param {function(number): {raDeg: number, dec: number}} coords -
-     J2000 coordinates of the target at each sample time (objCoords
-     for a state target; a constant for a static target).
- * @param {string} tz - IANA time zone name.
- * @param {number} lat - Observatory latitude in degrees.
- * @param {number} lon - Observatory longitude in degrees.
- * @param {number} monthStartMs - Epoch ms of local midnight on the
- *     first day of the first month.
- * @param {number} threshold - Max airmass X for a "usable" hour.
- * @returns {Array} 12 entries, first the month of monthStartMs, each
- *     {label ("Mon YYYY"), maxAlt (degrees; -Infinity when the target
- *     never rises), minAir (airmass; Infinity when it never rises),
- *     hours (float, count of sample hours with X <= threshold)}.
- */
-function annualCalendarMonths(coords, tz, lat, lon, monthStartMs, threshold) {
-  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  var p0 = tzParts(tz, monthStartMs);
-  var months = [], first = [], k, ms, p, b;
-  for (b = 0; b < 12; b++) {
-    months.push({ label: "", maxAlt: -Infinity, minAir: Infinity, hours: 0 });
-  }
-  for (k = 0; k < 8784; k++) {
-    ms = monthStartMs + k * 3600000;
-    p = tzParts(tz, ms);
-    b = (p.year * 12 + p.month) - (p0.year * 12 + p0.month);
-    if (b < 0 || b > 11) continue;
-    var jd = jdFromUtcMs(ms);
-    var c = coords(ms);
-    var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
-    var hd = horizonCoords(tt.raDeg / 15, tt.dec, jd, lat, lon);
-    if (first[b] === undefined) {
-      first[b] = true;
-      months[b].label = MONTHS[p.month - 1] + " " + p.year;
-    }
-    if (hd.alt > months[b].maxAlt) months[b].maxAlt = hd.alt;
-    if (hd.alt <= 0) continue;
-    var x = airmass(hd.alt);
-    if (x < months[b].minAir) months[b].minAir = x;
-    if (x <= threshold) months[b].hours += 1;
-  }
-  return months;
-}
-
 var __calCache = { key: null, data: null };
 
 /**
@@ -2536,7 +2543,14 @@ function calendarData() {
 }
 
 /**
- * Render the annual calendar panel: a 12-month table per target.
+ * Render the annual calendar panel.
+ *
+ * Per target: a season line (max altitude, min airmass, total usable
+ * hours, first-to-last usable month) above a table with one row per
+ * month giving the usable hours and the span of usable local days.
+ * The max altitude and min airmass are season-level quantities for a
+ * static target, so they are reported once per target rather than
+ * repeated per month.
  */
 function renderCalendar() {
   var box = $("calendar");
@@ -2555,15 +2569,36 @@ function renderCalendar() {
     html = '<div class="cal-empty">Add a target to see its annual coverage.</div>';
   }
   data.targets.forEach(function (t) {
-    html += '<div class="cal-target"><b>' + htmlEscape(t.name) + "</b>";
-    html += '<table class="cal-table"><tr><th>Month</th><th>Max alt</th>' +
-            "<th>Min X</th><th>Usable h</th></tr>";
+    var maxAlt = -Infinity, minAir = Infinity, totalH = 0,
+        seasonA = null, seasonB = null;
     t.months.forEach(function (m) {
-      html += "<tr><td>" + m.label + "</td><td>" +
-        (isFinite(m.maxAlt) ? m.maxAlt.toFixed(1) + "\u00b0" : "\u2014") +
-        "</td><td>" +
-        (isFinite(m.minAir) ? m.minAir.toFixed(2) : "\u2014") +
-        "</td><td>" + m.hours.toFixed(1) + "</td></tr>";
+      if (m.maxAlt > maxAlt) maxAlt = m.maxAlt;
+      if (m.minAir < minAir) minAir = m.minAir;
+      if (m.hours > 0) {
+        totalH += m.hours;
+        if (seasonA === null) seasonA = m.label;
+        seasonB = m.label;
+      }
+    });
+    var stats = [];
+    if (isFinite(maxAlt)) stats.push("max alt " + maxAlt.toFixed(1) + "\u00b0");
+    if (isFinite(minAir)) stats.push("min X " + minAir.toFixed(3));
+    if (totalH > 0) {
+      stats.push(totalH.toFixed(0) + " h" +
+                 (seasonA ? ", " + seasonA + " \u2013 " + seasonB : ""));
+    } else {
+      stats.push("no usable month");
+    }
+    html += '<div class="cal-target"><b>' + htmlEscape(t.name) + "</b> " +
+            stats.join(" \u00b7 ") + "</div>";
+    html += '<table class="cal-table"><tr><th>Month</th><th>Usable h</th>' +
+            "<th>Usable days</th></tr>";
+    t.months.forEach(function (m) {
+      var days = m.firstDay === null ? "\u2014" :
+        (m.firstDay === m.lastDay ? String(m.firstDay) :
+         m.firstDay + "\u2013" + m.lastDay);
+      html += "<tr><td>" + m.label + "</td><td>" + m.hours.toFixed(1) +
+              "</td><td>" + days + "</td></tr>";
     });
     html += "</table></div>";
   });
