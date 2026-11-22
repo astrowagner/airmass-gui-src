@@ -295,7 +295,7 @@ footer li { margin-bottom: 0.2rem; }
 <details id="extra-details">
 <summary>Extra details</summary>
 <ul>
-<li>Airmass: Kasten &amp; Young (1989), normalized so X(90&deg;) = 1; curves are hidden below the horizon and the dotted line marks X = 2.</li>
+<li>Airmass: Kasten &amp; Young (1989), normalized so X(90&deg;) = 1; the airmass and altitude curves are hidden below the horizon, and in airmass mode the dotted line marks X = 2.</li>
 <li>Twilight shading marks day / civil / nautical / astro / night.</li>
 <li>Entered ICRS coordinates are precessed to the mean equator/equinox of date (IAU 2006; nutation omitted), so altitudes agree with the desktop app to ~0.01&deg;. The Simbad button looks a name up in CDS Simbad (needs internet; mirrors tried in order).</li>
 <li>Chart navigation: the wheel pans the time window, Ctrl/&#8984;+wheel or the + / &minus; buttons zoom, the scrollbar under the chart pans (drag the thumb) or jumps (click the track), dragging inside the plot pans, dragging the left or right plot edge resizes the window, and double-clicking or the &#8634; button resets to the full range; the arrow keys pan by 10% of the visible window, + / &minus; zoom, and 0 or R resets. The bottom time axis is local, the top one UTC; hovering shows both times plus each target&rsquo;s altitude, azimuth, airmass and parallactic angle at that instant.</li>
@@ -2750,8 +2750,9 @@ function csvEsc(s) {
  * plot height) and twilight-line overlays, the grid and axis labels of
  * the selected curve
  * (state.options.curve: "airmass", "altitude", or "azimuth"), one curve
- * per target (interpolated from objCoords for moving targets), an
- * optional dashed Moon curve, and, in airmass mode only, the threshold
+ * per target (interpolated from objCoords for moving targets, with
+ * segments below the horizon omitted), an optional dashed Moon curve,
+ * and, in airmass mode only, the threshold
  * line, the X = 2 reference, and the per-target usable-window bands with
  * transit ticks, and a red now marker (a vertical line with a filled
  * circle at the top of the plot, shown when the current time lies in
@@ -3029,10 +3030,20 @@ function draw(fast) {
       if (altitude(ctt.raDeg / 15, ctt.dec, cjd, obs.lat, obs.lon) > 0) { rises = true; break; }
     }
     if (!rises) below.push(name);
-    var labP = finite[0];
-    for (var fi = 1; fi < finite.length; fi++) {
-      if (curve === "altitude") { if (finite[fi][vi] > labP[vi]) labP = finite[fi]; }
-      else if (finite[fi][vi] < labP[vi]) labP = finite[fi];
+    // Label point: the extreme of the drawn (above-horizon) portion;
+    // null when nothing is above the horizon in altitude mode.
+    var labP = null;
+    if (curve === "airmass") {
+      labP = finite[0];
+      for (var fi = 1; fi < finite.length; fi++)
+        if (finite[fi][vi] < labP[vi]) labP = finite[fi];
+    } else if (curve === "altitude") {
+      var above = finite.filter(function (p) { return p[vi] > 0; });
+      if (above.length > 0) {
+        labP = above[0];
+        for (var fi2 = 1; fi2 < above.length; fi2++)
+          if (above[fi2][vi] > labP[vi]) labP = above[fi2];
+      }
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.6;
@@ -3040,7 +3051,9 @@ function draw(fast) {
     var open = false, prevVal = null;
     for (var pi = 0; pi < pts.length; pi++) {
       var val = pts[pi][vi];
-      if (!isFinite(val)) { open = false; prevVal = null; continue; }
+      if (!isFinite(val) || (curve === "altitude" && val <= 0)) {
+        open = false; prevVal = null; continue;
+      }
       if (open && curve === "azimuth" && prevVal !== null &&
           Math.abs(val - prevVal) > 180) open = false;
       var px = X(pts[pi][0]), py = curve === "airmass" ? Y(altFromAirmass(val)) : Y(val);
@@ -3048,7 +3061,7 @@ function draw(fast) {
       prevVal = val;
     }
     ctx.stroke();
-    if (curve !== "azimuth") {
+    if (labP !== null) {
       ctx.fillStyle = color;
       ctx.font = "11px " + FONT;
       ctx.textAlign = "left";
@@ -3077,7 +3090,9 @@ function draw(fast) {
       var mhd = horizonCoords(mr.raH, mr.dec, jd, obs.lat, obs.lon);
       var mval = curve === "azimuth" ? mhd.az
                  : (curve === "airmass" ? airmass(mhd.alt) : mhd.alt);
-      if (!isFinite(mval)) { moonOpen = false; mprev = null; continue; }
+      if (!isFinite(mval) || (curve === "altitude" && mval <= 0)) {
+        moonOpen = false; mprev = null; continue;
+      }
       if (moonOpen && curve === "azimuth" && mprev !== null &&
           Math.abs(mval - mprev) > 180) moonOpen = false;
       var mpx = X(ms), mpy = curve === "airmass" ? Y(altFromAirmass(mval)) : Y(mval);
