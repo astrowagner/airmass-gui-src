@@ -263,6 +263,27 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("function panelResizeMode(", self.page)
         self.assertIn("overflow: auto", self.page)
 
+    def test_sidebar_column_resize(self):
+        """The left column resizes from its right-edge strip; the width
+        persists in localStorage and re-clamps on window resize."""
+        self.assertIn('<div class="layout" id="layout">', self.page)
+        self.assertIn('<aside id="sidebar">', self.page)
+        self.assertIn('id="sidebar-strip"', self.page)
+        self.assertIn("function applySidebarW(", self.page)
+        self.assertIn("function sidebarWide(", self.page)
+        self.assertIn('kind: "sidebar"', self.page)
+        self.assertIn('"airmass-gui:sidebar-w"', self.page)
+        self.assertIn("SIDEBAR_MIN_W", self.page)
+
+    def test_extra_target_info(self):
+        """The Extra info checkbox toggles the Simbad info column on the
+        target rows and lives in the shared state."""
+        self.assertIn('id="extra-chk"', self.page)
+        self.assertIn("extraInfo: false", self.page)
+        self.assertIn('$("extra-chk").addEventListener("change"', self.page)
+        self.assertIn("#targets.extra .target-row", self.page)
+        self.assertIn("#targets:not(.extra) .target-row .info", self.page)
+
     def test_today_button(self):
         """The Start field is plain 24-hour text and Today centers the range on tonight."""
         self.assertIn('<input id="start" type="text"', self.page)
