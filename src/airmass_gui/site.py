@@ -94,7 +94,7 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.45;
 }
-.wrap { max-width: 1400px; margin: 0 auto; padding: 1.5rem 1.25rem 2rem; }
+.wrap { width: 95%; margin: 0 auto; padding: 1.5rem 0 2rem; }
 header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
 header p { margin: 0; color: var(--fg-dim); }
 .layout { display: grid; grid-template-columns: 340px 1fr; gap: 1rem; margin-top: 1rem; }

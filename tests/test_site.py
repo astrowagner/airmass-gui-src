@@ -169,6 +169,12 @@ class SitePageTests(unittest.TestCase):
         for color in (chart.AXES_BG, chart.FG, chart.FG_DIM, chart.BORDER, chart.ERROR_FG):
             self.assertIn(color, self.page)
 
+    def test_layout_uses_full_width(self):
+        """Content spans 95% of the window width; nothing caps it, so the
+        chart column grows with the window."""
+        self.assertIn(".wrap { width: 95%; margin: 0 auto;", self.page)
+        self.assertNotIn("max-width: 1400px", self.page)
+
     def test_tooltip_and_view_navigation(self):
         """Tooltip, crosshair, resize handle, and dblclick wiring are present."""
         self.assertIn('<div id="tooltip">', self.page)
