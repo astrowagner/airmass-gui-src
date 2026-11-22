@@ -184,6 +184,15 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('href="https://github.com/astrowagner/airmass-gui-src"', self.page)
         self.assertIn("MIT", self.page)
 
+    def test_chart_navigation_controls(self):
+        """The chart has a horizontal scrollbar and zoom-in/out/reset buttons."""
+        self.assertIn('<div class="hscroll" id="hscroll"', self.page)
+        self.assertIn('id="hscroll-thumb"', self.page)
+        for btn in ("zoom-in", "zoom-out", "zoom-reset"):
+            self.assertIn('id="%s"' % btn, self.page)
+        self.assertIn("function updateHScroll(", self.page)
+        self.assertIn("function zoomBy(", self.page)
+
     def test_shareable_url(self):
         """Share button and the encode/decode core functions are present."""
         self.assertIn('<button id="copylink-btn"', self.page)
