@@ -152,6 +152,7 @@ input[type="checkbox"] { flex: none; }
                                                    text-align: right; }
 #calendar .cal-table th { color: var(--fg-dim); font-weight: normal; }
 #calendar .cal-empty { color: var(--fg-dim); font-size: 0.8rem; }
+#calendar .cal-note { color: var(--fg-dim); font-size: 0.75rem; margin-bottom: 0.35rem; }
 canvas { display: block; width: 100%; }
 .chart-nav { display: flex; align-items: center; gap: 0.45rem; margin-top: 0.5rem; }
 .hscroll { position: relative; flex: 1; height: 12px; border-radius: 6px;
@@ -1556,12 +1557,11 @@ function fieldRotationDeg(obj, t0, t1, latDeg, lonDeg) {
 /**
  * Twelve monthly observing summaries for one target, on a 1-hour grid.
  *
- * Samples the target's altitude once per hour (UTC) starting at local
- * midnight on the first day of the month containing monthStartMs,
- * through the next eleven months (a full year of samples). For each
- * month it reports the maximum
- * altitude, the minimum airmass while above the horizon, and the number
- * of sample hours with airmass at or below the threshold.
+ * Samples 8784 consecutive hours from monthStartMs (local midnight on
+ * the first day of the first month), assigning each sample to its local
+ * calendar month. For each month it reports the maximum altitude, the
+ * time and airmass of the lowest sample above the horizon, and, for the
+ * usable hours, the count, distinct local days, and first/last day.
  *
  * @param {function(number): {raDeg: number, dec: number}} coords -
      J2000 coordinates of the target at each sample time (objCoords
@@ -1576,17 +1576,21 @@ function fieldRotationDeg(obj, t0, t1, latDeg, lonDeg) {
  *     {label ("Mon YYYY"), maxAlt (degrees; -Infinity when the target
  *     never rises), minAir (airmass; Infinity when it never rises),
  *     hours (float, count of sample hours with X <= threshold),
- *     firstDay (local day of the first usable hour, null when the
- *     month has none), lastDay (local day of the last usable hour)}.
+ *     nights (count of distinct local days with at least one usable
+ *     hour), firstDay (local day of the first usable hour, null when
+ *     the month has none), lastDay (local day of the last usable
+ *     hour), bestMs (epoch ms of the lowest-airmass sample above the
+ *     horizon; null when the target never rises in the month)}.
  */
 function annualCalendarMonths(coords, tz, lat, lon, monthStartMs, threshold) {
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var p0 = tzParts(tz, monthStartMs);
-  var months = [], first = [], k, ms, p, b;
+  var months = [], nights = [], first = [], k, ms, p, b;
   for (b = 0; b < 12; b++) {
+    nights.push({});
     months.push({ label: "", maxAlt: -Infinity, minAir: Infinity, hours: 0,
-                  firstDay: null, lastDay: null });
+                  nights: 0, bestMs: null, firstDay: null, lastDay: null });
   }
   for (k = 0; k < 8784; k++) {
     ms = monthStartMs + k * 3600000;
@@ -1604,9 +1608,16 @@ function annualCalendarMonths(coords, tz, lat, lon, monthStartMs, threshold) {
     if (hd.alt > months[b].maxAlt) months[b].maxAlt = hd.alt;
     if (hd.alt <= 0) continue;
     var x = airmass(hd.alt);
-    if (x < months[b].minAir) months[b].minAir = x;
+    if (x < months[b].minAir) {
+      months[b].minAir = x;
+      months[b].bestMs = ms;
+    }
     if (x <= threshold) {
       months[b].hours += 1;
+      if (nights[b][p.day] === undefined) {
+        nights[b][p.day] = true;
+        months[b].nights += 1;
+      }
       if (months[b].firstDay === null) months[b].firstDay = p.day;
       months[b].lastDay = p.day;
     }
@@ -2637,12 +2648,19 @@ function calendarData() {
 /**
  * Render the annual calendar panel.
  *
- * Per target: a season line (max altitude, min airmass, total usable
- * hours, first-to-last usable month) above a table with one row per
- * month giving the usable hours and the span of usable local days.
- * The max altitude and min airmass are season-level quantities for a
- * static target, so they are reported once per target rather than
- * repeated per month.
+ * A note explains the sampling grid and the usable definition. Per
+ * target: a season line (max altitude, total usable hours,
+ * first-to-last usable month, and the year's lowest-airmass sample
+ * above the horizon as local date/time and airmass; or no usable
+ * month; or never rises) above a 12-row table: usable hours, usable
+ * nights (distinct local days), span of usable local days, and the
+ * local time and airmass of the month's lowest-airmass sample above
+ * the horizon.
+ *
+ * @returns {undefined} Nothing returned.
+ *
+ * Outputs: the #calendar contents and the #calendar-panel visibility
+ *     (hidden when the calendar is off or the range is unparseable).
  */
 function renderCalendar() {
   var box = $("calendar");
@@ -2659,38 +2677,58 @@ function renderCalendar() {
   var html = "";
   if (data.targets.length === 0) {
     html = '<div class="cal-empty">Add a target to see its annual coverage.</div>';
+  } else {
+    html += '<div class="cal-note">Sampled once per hour; usable = X &#8804; ' +
+            data.threshold.toFixed(2) +
+            ". Best hour is the local time of the month's lowest-airmass " +
+            "sample above the horizon.</div>";
   }
+  var tz = resolveTz(state.observatory.timezone);
   data.targets.forEach(function (t) {
     var maxAlt = -Infinity, minAir = Infinity, totalH = 0,
-        seasonA = null, seasonB = null;
+        seasonA = null, seasonB = null, bestMs = null;
     t.months.forEach(function (m) {
       if (m.maxAlt > maxAlt) maxAlt = m.maxAlt;
-      if (m.minAir < minAir) minAir = m.minAir;
+      if (m.minAir < minAir) {
+        minAir = m.minAir;
+        bestMs = m.bestMs;
+      }
       if (m.hours > 0) {
         totalH += m.hours;
         if (seasonA === null) seasonA = m.label;
         seasonB = m.label;
       }
     });
-    var stats = [];
-    if (isFinite(maxAlt)) stats.push("max alt " + maxAlt.toFixed(1) + "\u00b0");
-    if (isFinite(minAir)) stats.push("min X " + minAir.toFixed(3));
-    if (totalH > 0) {
-      stats.push(totalH.toFixed(0) + " h" +
-                 (seasonA ? ", " + seasonA + " \u2013 " + seasonB : ""));
+    var line;
+    if (!isFinite(maxAlt)) {
+      line = "never rises above the horizon";
+    } else if (totalH === 0) {
+      line = "max alt " + maxAlt.toFixed(1) + "\u00b0 \u00b7 no usable month";
     } else {
-      stats.push("no usable month");
+      line = "max alt " + maxAlt.toFixed(1) + "\u00b0 \u00b7 " +
+             totalH.toFixed(0) + " h, " + seasonA + " \u2013 " + seasonB +
+             " \u00b7 best X " + minAir.toFixed(4) +
+             " (" + localStamp(bestMs) + " local)";
     }
     html += '<div class="cal-target"><b>' + htmlEscape(t.name) + "</b> " +
-            stats.join(" \u00b7 ") + "</div>";
+            line + "</div>";
     html += '<table class="cal-table"><tr><th>Month</th><th>Usable h</th>' +
-            "<th>Usable days</th></tr>";
+            "<th>Usable nights</th><th>Usable days</th><th>Best hour</th>" +
+            "<th>Best X</th></tr>";
     t.months.forEach(function (m) {
       var days = m.firstDay === null ? "\u2014" :
         (m.firstDay === m.lastDay ? String(m.firstDay) :
          m.firstDay + "\u2013" + m.lastDay);
+      var hour = "\u2014";
+      if (m.bestMs !== null) {
+        var bp = tzParts(tz, m.bestMs);
+        hour = pad2(bp.hour) + ":" + pad2(bp.minute);
+      }
       html += "<tr><td>" + m.label + "</td><td>" + m.hours.toFixed(1) +
-              "</td><td>" + days + "</td></tr>";
+              "</td><td>" + (m.nights === 0 ? "\u2014" : m.nights) +
+              "</td><td>" + days + "</td><td>" + hour + "</td><td>" +
+              (isFinite(m.minAir) ? m.minAir.toFixed(4) : "\u2014") +
+              "</td></tr>";
     });
     html += "</table></div>";
   });

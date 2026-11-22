@@ -476,7 +476,9 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertAlmostEqual(got, expected, delta=0.05)
 
     def test_annual_calendar(self):
-        """annualCalendarMonths matches astropy: max alt to 0.1 deg, hours to 2 h."""
+        """annualCalendarMonths matches astropy: max alt to 0.1 deg,
+        hours to 2 h, best airmass to 0.01 and its time to 3 h, and
+        usable nights to 1 day."""
         # Reference: sample the refraction-free astropy altitude on the
         # same UTC hour grid the core uses (tz 'UTC'), taking the
         # per-month max altitude and counting the hours with X <=
@@ -513,16 +515,31 @@ class JsCoreNumericTests(unittest.TestCase):
             if m["hours"] == 0:
                 self.assertIsNone(m["firstDay"])
                 self.assertIsNone(m["lastDay"])
+                self.assertEqual(m["nights"], 0)
             else:
                 self.assertGreaterEqual(m["firstDay"], 1)
                 self.assertLessEqual(m["firstDay"], m["lastDay"])
                 self.assertGreaterEqual(m["lastDay"] - m["firstDay"] + 1,
                                         math.ceil(m["hours"] / 24.0))
-        # Month 0 in full: max altitude, usable-hour count, and the
-        # first/last usable day (UTC days, since the grid's tz is UTC).
+                self.assertGreaterEqual(m["nights"], 1)
+                self.assertLessEqual(m["nights"], m["lastDay"] - m["firstDay"] + 1)
+                self.assertLessEqual(m["nights"], m["hours"])
+            if m["maxAlt"] is None:
+                self.assertIsNone(m["bestMs"])
+            else:
+                self.assertIsNotNone(m["bestMs"])
+                self.assertGreaterEqual(m["bestMs"], ms0)
+                self.assertLess(m["bestMs"], ms0 + 8784 * 3600000)
+        # Month 0 in full: max altitude, usable-hour count, the
+        # first/last usable day (UTC days, since the grid's tz is
+        # UTC), the lowest-airmass sample and its time, and the count
+        # of distinct usable days.
         ref_alt = -math.inf
         ref_hours = 0
         ref_first = ref_last = None
+        ref_best_x = math.inf
+        ref_best_ms = None
+        ref_nights = set()
         for k in range(744):
             ms = ms0 + k * 3600000
             t = Time(ms / 1000.0, format="unix")
@@ -530,17 +547,25 @@ class JsCoreNumericTests(unittest.TestCase):
             if alt > ref_alt:
                 ref_alt = alt
             x = self._js(f"kastyAir({alt})")
-            if alt > 0 and x <= 1.7:
-                ref_hours += 1
-                day = int(t.isot[8:10])
-                if ref_first is None:
-                    ref_first = day
-                ref_last = day
+            if alt > 0:
+                if x < ref_best_x:
+                    ref_best_x = x
+                    ref_best_ms = ms
+                if x <= 1.7:
+                    ref_hours += 1
+                    day = int(t.isot[8:10])
+                    ref_nights.add(day)
+                    if ref_first is None:
+                        ref_first = day
+                    ref_last = day
         m0 = got[0]
         self.assertAlmostEqual(m0["maxAlt"], ref_alt, delta=0.1)
         self.assertAlmostEqual(m0["hours"], ref_hours, delta=2.0)
         self.assertAlmostEqual(m0["firstDay"], ref_first, delta=1.0)
         self.assertAlmostEqual(m0["lastDay"], ref_last, delta=1.0)
+        self.assertAlmostEqual(m0["minAir"], ref_best_x, delta=0.01)
+        self.assertLessEqual(abs(m0["bestMs"] - ref_best_ms), 3 * 3600000)
+        self.assertAlmostEqual(m0["nights"], len(ref_nights), delta=1.0)
 
     def test_precess(self):
         """precessIcrsToTete matches astropy TETE at nutation level (~0.02 deg)."""
