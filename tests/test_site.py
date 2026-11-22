@@ -192,6 +192,7 @@ class SitePageTests(unittest.TestCase):
             self.assertIn('id="%s"' % btn, self.page)
         self.assertIn("function updateHScroll(", self.page)
         self.assertIn("function zoomBy(", self.page)
+        self.assertIn("function drawNow(", self.page)
 
     def test_shareable_url(self):
         """Share button and the encode/decode core functions are present."""
