@@ -163,6 +163,12 @@ canvas { display: block; width: 100%; }
 .status { min-height: 1.15em; font-size: 0.8rem; color: var(--error);
           margin-top: 0.4rem; word-break: break-word; }
 footer { margin-top: 1.25rem; color: var(--fg-dim); font-size: 0.8rem; }
+footer summary { cursor: pointer; color: var(--fg); }
+footer summary:hover { color: var(--accent); }
+footer details ul { margin: 0.45rem 0 0.3rem 1.2rem; }
+footer .credit { margin-top: 1rem; }
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
 footer li { margin-bottom: 0.2rem; }
 </style>
 </head>
@@ -267,6 +273,8 @@ footer li { margin-bottom: 0.2rem; }
 </main>
 </div>
 <footer>
+<details id="extra-details">
+<summary>Extra details</summary>
 <ul>
 <li>Airmass: Kasten &amp; Young (1989), normalized so X(90&deg;) = 1; curves are hidden below the horizon and the dotted line marks X = 2.</li>
 <li>Twilight shading marks day / civil / nautical / astro / night.</li>
@@ -280,6 +288,8 @@ footer li { margin-bottom: 0.2rem; }
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass and the tooltip adds its altitude, illumination fraction, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans, two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
+</details>
+<p class="credit">Airmass chart by Kevin Wagner &middot; <a href="http://kevinwagner.space">kevinwagner.space</a></p>
 </footer>
 </div>
 <script>

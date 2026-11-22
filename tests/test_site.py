@@ -174,6 +174,13 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("state.options.dusk", self.page)
         self.assertIn("function sunEvents(", self.core)
 
+    def test_footer_credit_and_details(self):
+        """Footer info lives in an 'Extra details' dropdown; the credit links the site."""
+        self.assertIn('<details id="extra-details">\n<summary>Extra details</summary>\n<ul>', self.page)
+        self.assertIn("</ul>\n</details>", self.page)
+        self.assertIn('class="credit"', self.page)
+        self.assertIn('<a href="http://kevinwagner.space">kevinwagner.space</a>', self.page)
+
     def test_shareable_url(self):
         """Share button and the encode/decode core functions are present."""
         self.assertIn('<button id="copylink-btn"', self.page)
