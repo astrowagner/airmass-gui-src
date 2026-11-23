@@ -47,7 +47,8 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "simbadCooParse", "findingStarSize",
-    "findingGridStep", "findingImageFov", "findingImageUrl",
+    "findingGridStep", "skyViewPosition", "skyViewQueryUrl",
+    "parseSkyViewPage", "skyViewPageError",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -388,12 +389,15 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('id="finding-panes"', self.page)
         self.assertIn('.finding-pane canvas, .finding-pane img', self.page)
         self.assertIn('flex: 1 1 180px', self.page)
-        self.assertIn('function findingImageFov(', self.page)
-        self.assertIn('function findingImageUrl(', self.page)
+        self.assertIn('<option value="Digitized Sky Survey" selected>DSS</option>', self.page)
+        self.assertIn('function skyViewPosition(', self.page)
+        self.assertIn('function skyViewQueryUrl(', self.page)
+        self.assertIn('function parseSkyViewPage(', self.page)
+        self.assertIn('function skyViewPageError(', self.page)
         self.assertIn('function updateFindingImage(', self.page)
         self.assertIn('function drawFindingImageOverlay(', self.page)
-        self.assertIn('skyview_images.cgi', self.page)
-        self.assertIn('findingSurvey: "2MASS"', self.page)
+        self.assertIn('runquery.pl', self.page)
+        self.assertIn('findingSurvey: "Digitized Sky Survey"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
         self.assertIn('function findingQueryUrl(', self.page)
