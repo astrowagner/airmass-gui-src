@@ -47,7 +47,9 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "simbadCooParse", "findingStarSize",
-    "findingGridStep", "aladinQueryUrl",
+    "findingGridStep",
+    "hpxMortonEncode", "hpxMortonDecode", "hpxHash", "hpxCenter",
+    "hpxUnproj", "hipsTileUrl", "hipsCirclePoints", "hipsOrderForField",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -374,7 +376,7 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        radius and survey selectors, a star-chart canvas and an Aladin
+        radius and survey selectors, a star-chart canvas and an Alasky
         sky-image pane, the Simbad coo lookup, and a resizable
         panel."""
         self.assertIn(
@@ -391,14 +393,20 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('flex: 1 1 180px', self.page)
         self.assertIn('<option value="DSS" selected>DSS</option>', self.page)
         self.assertIn('<option value="2MASS">2MASS</option>', self.page)
-        self.assertIn('<option value="GAMA">GAMA</option>', self.page)
+        self.assertIn('<option value="Pan-STARRS">Pan-STARRS</option>',
+                      self.page)
         self.assertIn('<option value="SDSS">SDSS</option>', self.page)
-        self.assertIn('<option value="Hubble">Hubble</option>', self.page)
-        self.assertIn('function aladinQueryUrl(', self.page)
+        self.assertIn('<option value="AllWISE">AllWISE</option>',
+                      self.page)
+        self.assertIn('function hpxHash(', self.page)
         self.assertIn('function updateFindingImage(', self.page)
         self.assertIn('function drawFindingImageOverlay(', self.page)
-        self.assertIn('aladin.cds.cn/cs', self.page)
-        self.assertIn('imformat=jpeg', self.page)
+        self.assertIn('alasky.cds.unistra.fr/DSS/DSSColor', self.page)
+        self.assertIn('Norder', self.page)
+        self.assertIn('HIPS_SURVEYS', self.page)
+        self.assertIn('<canvas id="finding-img-canvas"></canvas>',
+                      self.page)
+        self.assertIn('#finding-img { display: none; }', self.page)
         self.assertIn('findingSurvey: "DSS"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
