@@ -48,9 +48,7 @@ CORE_FUNCTIONS = [
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "simbadCooParse", "findingStarSize",
     "findingGridStep", "findingRadiusText",
-    "hpxMortonEncode", "hpxMortonDecode", "hpxHash", "hpxCenter",
-    "hpxUnproj", "hipsTileUrl", "hipsCirclePoints", "hipsOrderForField",
-    "aladinCutoutScale", "aladinCutoutUrl",
+    "skyViewPosition", "skyViewQueryUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -313,9 +311,9 @@ class SitePageTests(unittest.TestCase):
         # The page must be self-contained: no external assets may be loaded.
         # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
         # send Access-Control-Allow-Origin: *, so nothing is embedded. The
-        # Aladin finding-chart sky image is likewise a runtime opt-in,
-        # loaded into the <img> only when the user enables the finding
-        # chart, so an <img> without a static src is allowed.)
+        # SkyView quick-query link in the finding chart is likewise a
+        # runtime opt-in: it opens in a new tab only when the user clicks
+        # it, so nothing is embedded.)
         for token in ("<script src", "<link ", "@import", "url(",
                       "<iframe", "<object", "<embed"):
             self.assertNotIn(token, self.page)
@@ -377,9 +375,8 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        radius and survey selectors, a star-chart canvas and an Alasky
-        sky-image pane, the Simbad coo lookup, and a resizable
-        panel."""
+        radius and survey selectors, a star-chart canvas, the SkyView
+        page link, the Simbad coo lookup, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -387,39 +384,39 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<select id="finding-radius">', self.page)
         self.assertIn('<canvas id="finding-chart"></canvas>', self.page)
         self.assertIn('<select id="finding-survey">', self.page)
-        self.assertIn('<img id="finding-img"', self.page)
-        self.assertIn('<canvas id="finding-img-overlay"></canvas>', self.page)
+        self.assertIn('<a id="finding-skylink" href="#" target="_blank"',
+                      self.page)
         self.assertIn('id="finding-panes"', self.page)
-        self.assertIn('.finding-pane canvas, .finding-pane img', self.page)
         self.assertIn('flex: 1 1 180px', self.page)
-        self.assertIn('<option value="DSS" selected>DSS</option>', self.page)
-        self.assertIn('<option value="2MASS">2MASS</option>', self.page)
-        self.assertIn('<option value="Pan-STARRS">Pan-STARRS</option>',
+        self.assertIn('<option value="Digitized Sky Survey" selected>DSS</option>',
                       self.page)
-        self.assertIn('<option value="SDSS">SDSS</option>', self.page)
-        self.assertIn('<option value="AllWISE">AllWISE</option>',
+        self.assertIn('<option value="HEAO 1 A-2">HEAO 1 (X-ray)</option>',
                       self.page)
+        self.assertIn('<option value="RASS-Cnt Broad">RASS (X-ray)</option>',
+                      self.page)
+        self.assertIn('<option value="TESS">TESS</option>', self.page)
+        self.assertIn('<option value="IRAS 100 micron">IRAS 100&mu;m</option>',
+                      self.page)
+        self.assertIn('<option value="0408MHz">0408 MHz</option>', self.page)
         self.assertIn('<option value="0.5">0.5&prime;</option>',
                       self.page)
         self.assertIn('<option value="30" selected>30&prime;</option>',
                       self.page)
         self.assertIn('<option value="300">5&deg;</option>', self.page)
-        self.assertIn('function aladinCutoutScale(', self.page)
-        self.assertIn('function aladinCutoutUrl(', self.page)
-        self.assertIn('function drawCutoutOverlay(', self.page)
+        self.assertIn('function skyViewPosition(', self.page)
+        self.assertIn('function skyViewQueryUrl(', self.page)
         self.assertIn('function findingRadiusText(', self.page)
-        self.assertIn('aladin.cds.unistra.fr/cs', self.page)
-        self.assertIn('Sky image (CDS)', self.page)
-        self.assertIn('function hpxHash(', self.page)
-        self.assertIn('function updateFindingImage(', self.page)
-        self.assertIn('function drawFindingImageOverlay(', self.page)
-        self.assertIn('alasky.cds.unistra.fr/DSS/DSSColor', self.page)
-        self.assertIn('Norder', self.page)
-        self.assertIn('HIPS_SURVEYS', self.page)
-        self.assertIn('<canvas id="finding-img-canvas"></canvas>',
+        self.assertIn('skyview.gsfc.nasa.gov/current/cgi/runquery.pl',
                       self.page)
-        self.assertIn('#finding-img { display: none; }', self.page)
-        self.assertIn('findingSurvey: "DSS"', self.page)
+        self.assertIn('Sky image (SkyView)', self.page)
+        self.assertIn('function updateFindingChart(', self.page)
+        self.assertNotIn('id="finding-img"', self.page)
+        self.assertNotIn('alasky.cds.unistra.fr', self.page)
+        self.assertNotIn('aladin.cds.unistra.fr', self.page)
+        self.assertNotIn('function hpxHash(', self.page)
+        self.assertNotIn('function updateFindingImage(', self.page)
+        self.assertNotIn('function drawCutoutOverlay(', self.page)
+        self.assertIn('findingSurvey: "Digitized Sky Survey"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
         self.assertIn('function findingQueryUrl(', self.page)
