@@ -5449,19 +5449,19 @@ function updateFindingChart() {
     var tab = findingCache[key];
     drawFindingChart(c, radiusArcmin, tab.rows, label, i);
     status.textContent = (tab.count != null ? tab.count : tab.rows.length) +
-      " objects within " + rText + "\u00b0 of " + label;
+      " objects within " + rText + " of " + label;
     return;
   }
   var seq = ++findingSeq;
   status.textContent = "Querying Simbad for stars within " + rText +
-    "\u00b0 of " + label + "\u2026";
+    " of " + label + "\u2026";
   simbadCooLookup(c.raDeg, c.dec, radiusArcmin)
     .then(function (tab) {
       if (seq !== findingSeq) return;
       findingCache[key] = tab;
       drawFindingChart(c, radiusArcmin, tab.rows, label, i);
       status.textContent = (tab.count != null ? tab.count : tab.rows.length) +
-        " objects within " + rText + "\u00b0 of " + label;
+        " objects within " + rText + " of " + label;
     })
     .catch(function (error) {
       if (seq !== findingSeq) return;
