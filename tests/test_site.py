@@ -47,8 +47,7 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "simbadCooParse", "findingStarSize",
-    "findingGridStep", "skyViewPosition", "skyViewQueryUrl",
-    "parseSkyViewPage", "skyViewPageError",
+    "findingGridStep", "aladinQueryUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -311,9 +310,9 @@ class SitePageTests(unittest.TestCase):
         # The page must be self-contained: no external assets may be loaded.
         # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
         # send Access-Control-Allow-Origin: *, so nothing is embedded. The
-        # SkyView finding-chart sky image is likewise a runtime opt-in
-        # fetch, set only when the user enables the finding chart, so an
-        # <img> without a static src is allowed.)
+        # Aladin finding-chart sky image is likewise a runtime opt-in,
+        # loaded into the <img> only when the user enables the finding
+        # chart, so an <img> without a static src is allowed.)
         for token in ("<script src", "<link ", "@import", "url(",
                       "<iframe", "<object", "<embed"):
             self.assertNotIn(token, self.page)
@@ -375,9 +374,9 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        radius and survey selectors, a star-chart canvas and a SkyView
-        sky-image pane, the Simbad coo lookup, a SkyView CORS relay
-fallback, and a resizable panel."""
+        radius and survey selectors, a star-chart canvas and an Aladin
+        sky-image pane, the Simbad coo lookup, and a resizable
+        panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -390,22 +389,17 @@ fallback, and a resizable panel."""
         self.assertIn('id="finding-panes"', self.page)
         self.assertIn('.finding-pane canvas, .finding-pane img', self.page)
         self.assertIn('flex: 1 1 180px', self.page)
-        self.assertIn('<option value="Digitized Sky Survey" selected>DSS</option>', self.page)
-        self.assertIn('function skyViewPosition(', self.page)
-        self.assertIn('function skyViewQueryUrl(', self.page)
-        self.assertIn('function parseSkyViewPage(', self.page)
-        self.assertIn('function skyViewPageError(', self.page)
-        self.assertIn('function fetchSkyViewPage(', self.page)
-        self.assertIn('function fetchSkyViewBlob(', self.page)
-        self.assertIn('function skyViewBlobIsImage(', self.page)
-        self.assertIn('function fetchSkyViewImage(', self.page)
-        self.assertIn('createObjectURL', self.page)
+        self.assertIn('<option value="DSS" selected>DSS</option>', self.page)
+        self.assertIn('<option value="2MASS">2MASS</option>', self.page)
+        self.assertIn('<option value="GAMA">GAMA</option>', self.page)
+        self.assertIn('<option value="SDSS">SDSS</option>', self.page)
+        self.assertIn('<option value="Hubble">Hubble</option>', self.page)
+        self.assertIn('function aladinQueryUrl(', self.page)
         self.assertIn('function updateFindingImage(', self.page)
         self.assertIn('function drawFindingImageOverlay(', self.page)
-        self.assertIn('runquery.pl', self.page)
-        self.assertIn('api.allorigins.win/raw', self.page)
-        self.assertIn('api.codetabs.com/v1/proxy', self.page)
-        self.assertIn('findingSurvey: "Digitized Sky Survey"', self.page)
+        self.assertIn('aladin.cds.cn/cs', self.page)
+        self.assertIn('imformat=jpeg', self.page)
+        self.assertIn('findingSurvey: "DSS"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
         self.assertIn('function findingQueryUrl(', self.page)
