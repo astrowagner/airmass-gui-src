@@ -47,9 +47,10 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "simbadCooParse", "findingStarSize",
-    "findingGridStep",
+    "findingGridStep", "findingRadiusText",
     "hpxMortonEncode", "hpxMortonDecode", "hpxHash", "hpxCenter",
     "hpxUnproj", "hipsTileUrl", "hipsCirclePoints", "hipsOrderForField",
+    "aladinCutoutScale", "aladinCutoutUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
 ]
@@ -398,6 +399,17 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<option value="SDSS">SDSS</option>', self.page)
         self.assertIn('<option value="AllWISE">AllWISE</option>',
                       self.page)
+        self.assertIn('<option value="0.5">0.5&prime;</option>',
+                      self.page)
+        self.assertIn('<option value="30" selected>30&prime;</option>',
+                      self.page)
+        self.assertIn('<option value="300">5&deg;</option>', self.page)
+        self.assertIn('function aladinCutoutScale(', self.page)
+        self.assertIn('function aladinCutoutUrl(', self.page)
+        self.assertIn('function drawCutoutOverlay(', self.page)
+        self.assertIn('function findingRadiusText(', self.page)
+        self.assertIn('aladin.cds.unistra.fr/cs', self.page)
+        self.assertIn('Sky image (CDS)', self.page)
         self.assertIn('function hpxHash(', self.page)
         self.assertIn('function updateFindingImage(', self.page)
         self.assertIn('function drawFindingImageOverlay(', self.page)
