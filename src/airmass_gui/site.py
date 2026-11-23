@@ -5427,10 +5427,12 @@ var findingImgSeq = 0;   // token that invalidates stale sky-image loads
  * #finding-img-canvas so its membership diamond fills the pane with
  * north up and east left, like the star chart; compass letters N and
  * E go in the two empty corners and drawFindingImageOverlay marks
- * the targets. A failed load reports the exact tile URL with a link,
- * which is also opened in a new tab. The findingImgSeq token
- * discards a tile that a newer center or survey supersedes before it
- * arrives.
+ * the targets. A failed load reports the exact tile URL, notes that
+ * the network may be blocking the CDS image server, and offers two
+ * links: one that opens the tile URL in a new tab (so its reachability
+ * can be checked directly) and one that re-requests it. The findingImgSeq
+ * token discards a tile that a newer center or survey supersedes before
+ * it arrives.
  *
  * @param {Object} center - Chart center {raDeg, dec} in degrees.
  * @param {number} radiusArcmin - Search radius, arcmin; it fixes the
@@ -5460,12 +5462,20 @@ function updateFindingImage(center, radiusArcmin, label, centerIdx) {
   imgStatus.textContent = "Loading " + survey + " image\u2026";
   var report = function (msg) {
     if (seq !== findingImgSeq) return;
-    imgStatus.textContent = msg;
-    var a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.textContent = "open the image URL";
-    imgStatus.appendChild(a);
+    imgStatus.textContent = msg + " ";
+    var open = document.createElement("a");
+    open.href = url;
+    open.target = "_blank";
+    open.textContent = "open the image URL";
+    imgStatus.appendChild(open);
+    var retry = document.createElement("a");
+    retry.href = "#";
+    retry.textContent = " retry";
+    retry.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      updateFindingImage(center, radiusArcmin, label, centerIdx);
+    });
+    imgStatus.appendChild(retry);
     window.open(url, "_blank");
   };
   img.onload = function () {
@@ -5495,7 +5505,10 @@ function updateFindingImage(center, radiusArcmin, label, centerIdx) {
   };
   img.onerror = function () {
     if (seq !== findingImgSeq) return;
-    report("Sky image failed to load (" + url + ")");
+    var host = url.split("/")[2];
+    report("Sky image failed to load (" + url +
+           "). Your network may block the CDS image server " + host +
+           "; the star-chart version still works");
   };
   img.src = url;
 }
