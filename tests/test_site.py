@@ -376,7 +376,8 @@ class SitePageTests(unittest.TestCase):
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
         radius and survey selectors, a star-chart canvas and a SkyView
-        sky-image pane, the Simbad coo lookup, and a resizable panel."""
+        sky-image pane, the Simbad coo lookup, a SkyView CORS relay
+fallback, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -394,9 +395,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('function skyViewQueryUrl(', self.page)
         self.assertIn('function parseSkyViewPage(', self.page)
         self.assertIn('function skyViewPageError(', self.page)
+        self.assertIn('function fetchSkyViewPage(', self.page)
         self.assertIn('function updateFindingImage(', self.page)
         self.assertIn('function drawFindingImageOverlay(', self.page)
         self.assertIn('runquery.pl', self.page)
+        self.assertIn('api.allorigins.win/raw', self.page)
+        self.assertIn('api.codetabs.com/v1/proxy', self.page)
         self.assertIn('findingSurvey: "Digitized Sky Survey"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
