@@ -67,6 +67,24 @@ def _extract_core(page: str) -> str:
     return page[begin : page.index(CORE_END)]
 
 
+def _extract_fn(page: str, name: str) -> str:
+    """Return the text of the top-level function named ``name``.
+
+    Braces inside string literals would break the count, so this is only
+    for functions with no braces in their strings.
+    """
+    start = page.index("function " + name)
+    depth = 0
+    for i in range(page.index("{", start), len(page)):
+        if page[i] == "{":
+            depth += 1
+        elif page[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return page[start : i + 1]
+    raise LookupError(name)
+
+
 def _strip_js_comments(code: str) -> str:
     """Remove // line comments; the core has no block comments or // in literals."""
     return re.sub(r"//[^\n]*", "", code)
@@ -996,6 +1014,40 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIsNone(self._js("decodeShareFragment('#x=1')"))
         self.assertIsNone(self._js("decodeShareFragment('#w=' + " + json.dumps(quote("[1,2]")) + ")"))
 
+
+    def test_preset_select_grouping(self):
+        """buildPresetSelect groups shared sites into optgroups with facility labels."""
+        fn = _extract_fn(self.page, "buildPresetSelect")
+        stub = (
+            "function __mk(tag) {"
+            " var e = {tag: tag, children: [], value: '', textContent: '', label: '',"
+            " innerHTML: '', appendChild: function (c) { this.children.push(c); }};"
+            " return e; }"
+            "var __root = __mk('select');"
+            "var document = {createElement: __mk};"
+            "function $(id) { return __root; }"
+            "var OBSERVATORIES = " + json.dumps([to_dict(p) for p in PRESETS.values()]) + ";"
+            + fn + ";"
+            "buildPresetSelect();"
+            "JSON.stringify(__root.children)"
+        )
+        got = json.loads(self.js.evaljs(stub))
+        groups = [c for c in got if c["tag"] == "optgroup"]
+        flat = [c for c in got if c["tag"] == "option"]
+        mauna = [g for g in groups if g["label"] == "Mauna Kea"]
+        self.assertEqual(len(mauna), 1)
+        self.assertEqual(
+            [(o["value"], o["textContent"]) for o in mauna[0]["children"]],
+            [("Mauna Kea (Gemini North)", "Gemini North"),
+             ("Mauna Kea (Keck I/II)", "Keck I/II"),
+             ("Mauna Kea (Subaru)", "Subaru")])
+        flat_pairs = {(o["value"], o["textContent"]) for o in flat}
+        self.assertIn(("Calar Alto", "Calar Alto"), flat_pairs)
+        self.assertEqual(got[-1]["value"], "Custom")
+        values = [o["value"] for c in got
+                  for o in ([c] if c["tag"] == "option" else c["children"])]
+        self.assertEqual(sorted(values),
+                         sorted([p.name for p in PRESETS.values()] + ["Custom"]))
 
     def test_preset_rename_migration(self):
         """migratePresetRename rewrites pre-rename preset names to the current names."""

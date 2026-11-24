@@ -34,9 +34,19 @@ class Observatory:
 PRESETS: dict[str, Observatory] = {
     obs.name: obs
     for obs in [
+        Observatory("Apache Point (APO 3.5m)", 34.2149, -107.8376, 2789.0, "America/Denver"),
+        Observatory("Brewster Hill (Hopkins 2.0)", 42.3439, -73.0553, 204.0, "America/New_York"),
+        Observatory("Brewster Hill (Whipple 4m)", 42.3439, -73.0553, 204.0, "America/New_York"),
         Observatory("Calar Alto", 37.2327, -2.6009, 2189.0, "Europe/Madrid"),
+        Observatory("Cerro La Silla (ESO)", -29.2563, -70.7530, 2388.0, "America/Santiago"),
         Observatory("Cerro Paranal (VLT)", -24.6275, -70.4044, 2635.0, "America/Santiago"),
         Observatory("Cerro Tololo (CTIO)", -30.1691, -70.8067, 2200.0, "America/Santiago"),
+        Observatory("Chajnantor (ALMA)", -23.0233, -67.7539, 5058.0, "America/Santiago"),
+        Observatory("Effelsberg (100m)", 48.9895, 6.9263, 310.0, "Europe/Berlin"),
+        Observatory("Green Bank (GBT 100m)", 38.4331, -79.4664, 805.0, "America/New_York"),
+        Observatory("Jodrell Bank (Lovell 76m)", 53.2444, -2.3089, 66.0, "Europe/London"),
+        Observatory("Karoo (MeerKAT)", -30.7215, 21.4184, 1074.0, "Africa/Johannesburg"),
+        Observatory("Kitt Peak (LPL 4m)", 31.9583, -111.6017, 2096.0, "America/Phoenix"),
         Observatory("Kitt Peak (NSO)", 31.9583, -111.6017, 2096.0, "America/Phoenix"),
         Observatory("Las Campanas (Carnegie)", -29.2944, -70.7250, 2420.0, "America/Santiago"),
         Observatory("Mauna Kea (Gemini North)", 19.8227, -155.4737, 2731.0, "Pacific/Honolulu"),
@@ -52,10 +62,16 @@ PRESETS: dict[str, Observatory] = {
         Observatory("Mount Hamilton (Lick)", 37.3414, -121.6428, 1243.0, "America/Los_Angeles"),
         Observatory("Mount Lemmon (NOAO)", 35.2009, -111.6075, 2167.0, "America/Phoenix"),
         Observatory("Mount McDonald (MPE)", 30.6709, -104.5612, 1710.0, "America/Chicago"),
+        Observatory("Mount Wilson (100-inch)", 34.2908, -118.1006, 1742.0, "America/Los_Angeles"),
+        Observatory("Pic du Midi (2.0m)", 42.9372, 0.9933, 2877.0, "Europe/Paris"),
         Observatory("Roque de los Muchachos (IAC)", 28.3127, -16.5017, 2382.0, "Europe/Madrid"),
         Observatory("San Antonio Mountain (Palomar)", 33.3564, -116.8650, 1712.0, "America/Los_Angeles"),
+        Observatory("San Pedro Martir (LMT 8m)", 30.1956, -115.7953, 2730.0, "America/Mexico_City"),
         Observatory("Siding Spring (AAO)", -31.2733, 149.0644, 1165.0, "Australia/Sydney"),
         Observatory("Sutherland (SALT)", -32.376, 20.810, 1062.0, "Africa/Johannesburg"),
+        Observatory("Teide (OT)", 28.0597, -16.6602, 2383.0, "Europe/Madrid"),
+        Observatory("VLA (Karl G. Jansky)", 34.0785, -107.6183, 2124.0, "America/Denver"),
+        Observatory("Yerkes (40-inch)", 42.5878, -89.1700, 366.0, "America/Chicago"),
     ]
 }
 

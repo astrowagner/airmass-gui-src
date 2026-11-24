@@ -2500,15 +2500,43 @@ function syncAllControls() {
 
 /**
  * Fill the preset combobox with the observatory list plus Custom.
+ *
+ * Presets sharing a site (names of the form "site (facility)") are grouped
+ * in an optgroup labelled by the site, each option showing only the
+ * facility; every other preset is a plain option. Option values always
+ * carry the full preset name.
  */
 function buildPresetSelect() {
   var sel = $("preset");
   sel.innerHTML = "";
+  var sites = {};
+  var order = [];
   OBSERVATORIES.forEach(function (p) {
-    var opt = document.createElement("option");
-    opt.value = p.name;
-    opt.textContent = p.name;
-    sel.appendChild(opt);
+    var sep = p.name.indexOf(" (");
+    var site = sep === -1 ? p.name : p.name.slice(0, sep);
+    var facility = sep === -1 ? "" : p.name.slice(sep + 2, -1);
+    if (!sites[site]) { sites[site] = []; order.push(site); }
+    sites[site].push({name: p.name, facility: facility});
+  });
+  order.sort();
+  order.forEach(function (site) {
+    var items = sites[site].sort(function (a, b) { return a.facility < b.facility ? -1 : 1; });
+    if (items.length === 1) {
+      var opt = document.createElement("option");
+      opt.value = items[0].name;
+      opt.textContent = items[0].name;
+      sel.appendChild(opt);
+      return;
+    }
+    var group = document.createElement("optgroup");
+    group.label = site;
+    items.forEach(function (item) {
+      var opt = document.createElement("option");
+      opt.value = item.name;
+      opt.textContent = item.facility;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
   });
   var custom = document.createElement("option");
   custom.value = "Custom";
