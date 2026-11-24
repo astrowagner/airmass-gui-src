@@ -49,7 +49,7 @@ CORE_FUNCTIONS = [
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
     "findingStarSize",
-    "findingGridStep", "findingRadiusText",
+    "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
     "skyViewPosition", "skyViewQueryUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
@@ -377,13 +377,16 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        radius and survey selectors, a star-chart canvas, the SkyView
+        zoom slider and survey selector, a star-chart canvas, the SkyView
         page link, the Simbad coo lookup, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
         self.assertIn('<select id="finding-target">', self.page)
-        self.assertIn('<select id="finding-radius">', self.page)
+        self.assertIn(
+            '<input type="range" id="finding-zoom" min="0" max="1000"',
+            self.page)
+        self.assertIn('id="finding-zoom-label"', self.page)
         self.assertIn('<canvas id="finding-chart"></canvas>', self.page)
         self.assertIn('<select id="finding-survey">', self.page)
         self.assertIn('<a id="finding-skylink" href="#" target="_blank"',
@@ -400,11 +403,12 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<option value="IRAS 100 micron">IRAS 100&mu;m</option>',
                       self.page)
         self.assertIn('<option value="0408MHz">0408 MHz</option>', self.page)
-        self.assertIn('<option value="0.5">0.5&prime;</option>',
+        self.assertNotIn('<select id="finding-radius">', self.page)
+        self.assertIn('function findingRadiusFromZoom(', self.page)
+        self.assertIn('function updateFindingZoomLabel(', self.page)
+        self.assertIn('function liveFindingZoom(', self.page)
+        self.assertIn('$("finding-zoom").addEventListener("input"',
                       self.page)
-        self.assertIn('<option value="30" selected>30&prime;</option>',
-                      self.page)
-        self.assertIn('<option value="300">5&deg;</option>', self.page)
         self.assertIn('function skyViewPosition(', self.page)
         self.assertIn('function skyViewQueryUrl(', self.page)
         self.assertIn(
@@ -883,6 +887,20 @@ class JsCoreNumericTests(unittest.TestCase):
             self._js("simbadCooParse('no table here')")["rows"], [])
         self.assertIsNone(
             self._js("simbadCooParse('no table here')")["count"])
+
+    def test_finding_zoom_radius(self):
+        """findingRadiusFromZoom log mapping: endpoints, default, monotonic."""
+        self.assertEqual(self._js("findingRadiusFromZoom(0)"), 0.5)
+        self.assertEqual(self._js("findingRadiusFromZoom(640)"), 30)
+        self.assertEqual(self._js("findingRadiusFromZoom(1000)"), 300)
+        self.assertEqual(self._js("findingRadiusFromZoom(250)"), 2.5)
+        self.assertEqual(self._js("findingRadiusFromZoom(500)"), 12)
+        self.assertEqual(self._js("findingRadiusFromZoom(750)"), 61)
+        vals = [self._js(f"findingRadiusFromZoom({t})")
+                for t in (0, 250, 500, 640, 750, 1000)]
+        self.assertEqual(vals, sorted(vals),
+                         f"zoom mapping not monotonic: {vals}")
+        self.assertTrue(all(v > 0 for v in vals))
 
     def test_finding_offset_and_detail_table(self):
         """findingOffsetText units and findingDetailTable row selection."""
