@@ -405,6 +405,9 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<option value="300">5&deg;</option>', self.page)
         self.assertIn('function skyViewPosition(', self.page)
         self.assertIn('function skyViewQueryUrl(', self.page)
+        self.assertIn(
+            'precessIcrsToTete(c.raDeg, c.dec, jdFromUtcMs(Date.now()))',
+            self.page)
         self.assertIn('function findingRadiusText(', self.page)
         self.assertIn('skyview.gsfc.nasa.gov/current/cgi/runquery.pl',
                       self.page)

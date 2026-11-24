@@ -382,7 +382,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
 <li>Targets: with Extra info checked, each target row also shows its Simbad record (V magnitude, spectral type, parallax) and, when fetched, its Horizons ephemeris point count; click the row's info text to clear it. The V magnitude is what the S/N estimate uses.</li>
 <li>S/N (panel hidden by default; enable it with the S/N estimate checkbox in the Options panel): with the panel on, each per-night window also lists, at the window midpoint, the single exposure that reaches the target S/N (or the S/N of the fixed exposure), from a V-band model: an 8.75&#215;10&#179; e&#8315;&sup1; cm&#8315;&sup2; s&#8315;&sup1; zero point, 21.9 mag arcsec&#8315;&sup2; of dark sky, a Moon term scaled by phase and altitude (Houdashelt et al. 2005), and 0.10 mag per airmass of extinction. The V magnitude is the target&rsquo;s (Simbad lookup or the V mag column); the defaults are editable in the S/N panel.</li>
-<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the search radius runs from 0.5&prime; to 5&deg;.</li>
+<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart is drawn in J2000 while the image is centered on the target&rsquo;s equinox-of-date position, so the two agree to about a quarter of a degree; the search radius runs from 0.5&prime; to 5&deg;.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass and the tooltip adds its altitude, illumination fraction, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
@@ -1888,8 +1888,12 @@ function skyViewPosition(raDeg, decDeg) {
  * @param {string} survey - Survey, one of the quick form's option
  *     values: Digitized Sky Survey, HEAO 1 A-2, RASS-Cnt Broad, TESS,
  *     IRAS 100 micron, 0408MHz.
- * @param {number} raDeg - RA of the image center, degrees.
- * @param {number} decDeg - Dec of the image center, degrees.
+ * @param {number} raDeg - RA of the image center, degrees (0-360),
+ *     in the equinox the survey wants; the quick queries here use the
+ *     equinox of date, so precess J2000 positions with
+ *     precessIcrsToTete first.
+ * @param {number} decDeg - Dec of the image center, degrees, signed,
+ *     in the same equinox.
  * @returns {string} URL of the SkyView quick query result page.
  */
 function skyViewQueryUrl(survey, raDeg, decDeg) {
@@ -5154,8 +5158,9 @@ function refreshFindingTargets() {
  * queries in the background, with findingSeq guarding against stale
  * responses. No-op while the option is off.
  *
- * @returns {void} Draws #finding-chart, points the SkyView page link
- *     at the target (skyViewQueryUrl), and updates #finding-status.
+ * @returns {void} Draws #finding-chart (J2000), points the SkyView
+ *     page link at the target's equinox-of-date position
+ *     (precessIcrsToTete, skyViewQueryUrl), and updates #finding-status.
  */
 function updateFindingChart() {
   var status = $("finding-status");
@@ -5176,9 +5181,12 @@ function updateFindingChart() {
   }
   var radiusArcmin = parseFloat($("finding-radius").value) || 30;
   var link = $("finding-skylink");
-  link.href = skyViewQueryUrl($("finding-survey").value, c.raDeg, c.dec);
+  // The image is centered on the equinox-of-date position; the chart
+  // itself stays in J2000.
+  var tet = precessIcrsToTete(c.raDeg, c.dec, jdFromUtcMs(Date.now()));
+  link.href = skyViewQueryUrl($("finding-survey").value, tet.raDeg, tet.dec);
   link.title = "Open the SkyView quick-query page for " + label +
-               " in " + $("finding-survey").value;
+               " (equinox of date) in " + $("finding-survey").value;
   var rText = findingRadiusText(radiusArcmin);
   var key = c.raDeg.toFixed(4) + "," + c.dec.toFixed(4) + "," + radiusArcmin;
   if (findingCache[key]) {
