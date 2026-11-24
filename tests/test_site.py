@@ -22,7 +22,7 @@ from astropy.coordinates import AltAz, EarthLocation, SkyCoord, TETE, get_body, 
 from astropy.time import Time
 
 from airmass_gui import astro, chart, lookup, sn
-from airmass_gui.observatories import PRESETS, to_dict
+from airmass_gui.observatories import PRESETS, RENAME_MAP, to_dict
 from airmass_gui.site import build_site
 from airmass_gui.workspace import new_workspace
 
@@ -31,7 +31,7 @@ try:
 except ImportError:  # pragma: no cover
     dukpy = None
 
-LBT = PRESETS["LBT (Large Binocular Telescope)"]
+LBT = PRESETS["Mount Graham (LBT)"]
 VEGA = SkyCoord("18h36m56.30142s", "+38d47m01.4506s", frame="icrs")
 
 CORE_BEGIN = "/*JS-CORE-BEGIN*/"
@@ -334,6 +334,14 @@ class SitePageTests(unittest.TestCase):
         )
         self.assertEqual(_embedded_json(self.page, "PALETTE"), chart.PALETTE)
 
+    def test_embedded_preset_renames(self):
+        """PRESET_RENAMES embeds the old -> new preset rename map."""
+        self.assertEqual(_embedded_json(self.page, "PRESET_RENAMES"), RENAME_MAP)
+
+    def test_load_state_migrates_renames(self):
+        """loadState runs the preset rename migration before normalizing."""
+        self.assertIn("migratePresetRename(s);", self.page)
+
     def test_embedded_shade_colors(self):
         """SHADE maps each level to a 6-digit hex color."""
         shade = _embedded_json(self.page, "SHADE")
@@ -471,9 +479,9 @@ class JsCoreNumericTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.dir = tempfile.TemporaryDirectory()
-        page = build_site(new_workspace(), Path(cls.dir.name) / "index.html").read_text(encoding="utf-8")
+        cls.page = build_site(new_workspace(), Path(cls.dir.name) / "index.html").read_text(encoding="utf-8")
         cls.js = dukpy.JSInterpreter()
-        cls.js.evaljs(_extract_core(page))
+        cls.js.evaljs(_extract_core(cls.page))
 
     @classmethod
     def tearDownClass(cls):
@@ -962,10 +970,10 @@ class JsCoreNumericTests(unittest.TestCase):
     def test_share_fragment_round_trip(self):
         """encode/decodeShareFragment round-trip both ways; malformed fragments give null."""
         doc = {
-            "observatory": {"name": "LBT (Large Binocular Telescope)", "lat": 31.76,
+            "observatory": {"name": "Mount Graham (LBT)", "lat": 31.76,
                             "lon": -111.37, "elevation_m": 2283.0,
                             "timezone": "America/Phoenix",
-                            "preset": "LBT (Large Binocular Telescope)"},
+                            "preset": "Mount Graham (LBT)"},
             "objects": [{"name": "Vega & <friends>", "ra": "18:36:56.3", "dec": "+38:47:01",
                          "color": "#89b4fa"}],
             "time_range": {"start": "2026-11-20 00:00", "days": 2.5},
@@ -988,6 +996,33 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIsNone(self._js("decodeShareFragment('#x=1')"))
         self.assertIsNone(self._js("decodeShareFragment('#w=' + " + json.dumps(quote("[1,2]")) + ")"))
 
+
+    def test_preset_rename_migration(self):
+        """migratePresetRename rewrites pre-rename preset names to the current names."""
+        start = self.page.index("function migratePresetRename")
+        end = self.page.index("\n}", start) + 2
+        self.js.evaljs("var PRESET_RENAMES = " + json.dumps(RENAME_MAP) + ";")
+        self.js.evaljs(self.page[start:end])
+        doc = {
+            "observatory": {"name": "LBT (Large Binocular Telescope)",
+                            "preset": "LBT (Large Binocular Telescope)",
+                            "lat": 32.44278, "lon": -111.155,
+                            "elevation_m": 2400.0,
+                            "timezone": "America/Phoenix"},
+            "objects": [],
+            "time_range": {"start": "2026-11-20 00:00", "days": 1.0},
+        }
+        got = json.loads(self.js.evaljs(
+            "JSON.stringify(migratePresetRename(JSON.parse(" + json.dumps(json.dumps(doc)) + ")))"))
+        self.assertEqual(got["observatory"]["preset"], "Mount Graham (LBT)")
+        self.assertEqual(got["observatory"]["name"], "Mount Graham (LBT)")
+        doc2 = {"observatory": {"name": "My custom site", "preset": "VLT (Paranal)"}}
+        got2 = json.loads(self.js.evaljs(
+            "JSON.stringify(migratePresetRename(JSON.parse(" + json.dumps(json.dumps(doc2)) + ")))"))
+        self.assertEqual(got2["observatory"]["preset"], "Cerro Paranal (VLT)")
+        self.assertEqual(got2["observatory"]["name"], "My custom site")
+        self.assertIsNone(self.js.evaljs("migratePresetRename(null)"))
+        self.assertEqual(json.loads(self.js.evaljs("JSON.stringify(migratePresetRename({}))")), {})
 
     def test_html_escape(self):
         """htmlEscape escapes &, <, >, double and single quotes."""

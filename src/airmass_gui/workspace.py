@@ -13,7 +13,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from .observatories import DEFAULT_PRESET, PRESETS, to_dict
+from .observatories import DEFAULT_PRESET, PRESETS, RENAME_MAP, to_dict
 
 # Schema version; bumped when the on-disk format changes incompatibly.
 WORKSPACE_VERSION = 1
@@ -67,7 +67,9 @@ def load(path: Path) -> dict:
     """Load a workspace document, merging it over the defaults.
 
     Unknown keys in the file are dropped; known keys keep the file's value.
-    A missing or malformed objects entry becomes an empty list.
+    A missing or malformed objects entry becomes an empty list. Preset
+    display names renamed after they were saved are rewritten to their
+    current form.
 
     Parameters
     ----------
@@ -93,6 +95,11 @@ def load(path: Path) -> dict:
     workspace.update({key: value for key, value in raw.items() if key in workspace})
     if not isinstance(workspace.get("objects"), list):
         workspace["objects"] = []
+    obs = workspace.get("observatory")
+    if isinstance(obs, dict):
+        for key in ("preset", "name"):
+            if obs.get(key) in RENAME_MAP:
+                obs[key] = RENAME_MAP[obs[key]]
     return workspace
 
 

@@ -34,6 +34,25 @@ class WorkspaceTest(unittest.TestCase):
             self.assertIn("observatory", data)
             self.assertIn("time_range", data)
 
+    def test_load_migrates_renamed_preset(self):
+        """Old preset display names are rewritten to the current names on load."""
+        ws = new_workspace()
+        ws["observatory"] = {
+            "name": "LBT (Large Binocular Telescope)",
+            "lat": 32.44278,
+            "lon": -111.155,
+            "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+            "preset": "LBT (Large Binocular Telescope)",
+        }
+        ws["objects"] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace.json"
+            save(path, ws)
+            data = load(path)
+        self.assertEqual(data["observatory"]["preset"], "Mount Graham (LBT)")
+        self.assertEqual(data["observatory"]["name"], "Mount Graham (LBT)")
+
     def test_save_creates_dirs_and_updates_modified(self):
         """save creates parent directories, sets modified, leaves no .tmp."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -48,4 +67,4 @@ class WorkspaceTest(unittest.TestCase):
         """The default workspace is Vega at LBT."""
         ws = new_workspace()
         self.assertEqual(ws["objects"][0]["name"], "Vega")
-        self.assertEqual(ws["observatory"]["name"], "LBT (Large Binocular Telescope)")
+        self.assertEqual(ws["observatory"]["name"], "Mount Graham (LBT)")

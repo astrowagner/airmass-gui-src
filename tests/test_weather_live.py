@@ -62,7 +62,7 @@ class TestLiveFixtureContract(unittest.TestCase):
         open-meteo echoes the model grid point it used rather than the
         requested coordinates; both agree within a grid cell (~1 km).
         """
-        lbt = PRESETS["LBT (Large Binocular Telescope)"]
+        lbt = PRESETS["Mount Graham (LBT)"]
         self.assertLessEqual(abs(self.body["latitude"] - lbt.lat), 0.01)
         self.assertLessEqual(abs(self.body["longitude"] - lbt.lon), 0.01)
         self.assertEqual(self.body["timezone"], "America/Phoenix")
@@ -105,7 +105,7 @@ class TestWeatherPipelineLive(unittest.TestCase):
         cls.script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
         cls.all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
         obs = json.loads(
-            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);\s*\nvar PALETTE",
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
                       cls.script, re.S).group(1))
         cls.tz_table = {"UTC": 0, "America/Denver": -7}
         for o in obs:

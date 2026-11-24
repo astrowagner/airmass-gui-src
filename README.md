@@ -1,7 +1,7 @@
 # Airmass Charts
 
 A tkinter GUI for creating airmass (X) charts of astronomical targets as seen from
-an observatory. Default observatory: LBT. Default demo target: Vega.
+an observatory. Default observatory: Mount Graham (LBT). Default demo target: Vega.
 
 ## Quick start (no setup)
 

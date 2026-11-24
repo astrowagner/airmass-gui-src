@@ -31,7 +31,7 @@ from airmass_gui.chart import AIRMASS_TICKS, ALT_TICKS, render_figure
 from airmass_gui.observatories import PRESETS
 from airmass_gui.workspace import new_workspace
 
-LBT = PRESETS["LBT (Large Binocular Telescope)"]
+LBT = PRESETS["Mount Graham (LBT)"]
 VEGA = SkyCoord("18h36m56.30142s", "+38d47m01.4506s", frame="icrs")
 PHOENIX = ZoneInfo("America/Phoenix")
 

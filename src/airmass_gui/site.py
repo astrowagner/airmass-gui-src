@@ -27,7 +27,7 @@ from .chart import (
     PALETTE,
     SHADE,
 )
-from .observatories import PRESETS, from_dict, to_dict
+from .observatories import PRESETS, RENAME_MAP, from_dict, to_dict
 
 
 def _blend_hex(fg_hex: str, alpha: float, bg_hex: str) -> str:
@@ -2092,6 +2092,8 @@ var INITIAL =
 __INITIAL__;
 var OBSERVATORIES =
 __OBSERVATORIES__;
+var PRESET_RENAMES =
+__PRESET_RENAMES__;
 var PALETTE =
 __PALETTE__;
 var SHADE =
@@ -2223,7 +2225,30 @@ function stateLooksValid(s) {
 }
 
 /**
+ * Rewrite an observatory preset renamed in a later version to its current name.
+ *
+ * Presets moved from "facility (mountain)" to "mountain (facility)" display
+ * names; states saved under an old name are mapped forward so shared links
+ * and saved workspaces keep working. Custom names that are not pre-rename
+ * presets are left unchanged.
+ *
+ * @param {Object} s State to migrate in place.
+ * @returns {Object} The same state, with observatory preset and name updated
+ *     when they carry a pre-rename name.
+ */
+function migratePresetRename(s) {
+  if (!s || !s.observatory) return s;
+  var oldPreset = s.observatory.preset;
+  var oldName = s.observatory.name;
+  if (PRESET_RENAMES[oldPreset]) s.observatory.preset = PRESET_RENAMES[oldPreset];
+  if (PRESET_RENAMES[oldName]) s.observatory.name = PRESET_RENAMES[oldName];
+  return s;
+}
+
+/**
  * Load the initial state: URL fragment, then saved state, then the embedded workspace.
+ *
+ * The loaded state is passed through migratePresetRename before normalization.
  *
  * @returns {Object} Normalized state.
  */
@@ -2243,6 +2268,7 @@ function loadState() {
     } catch (e) { /* fall through to INITIAL */ }
   }
   if (s === null) s = deepCopy(INITIAL);
+  migratePresetRename(s);
   return normalizeState(s);
 }
 
@@ -5693,6 +5719,7 @@ def build_site(data: dict, out_path: str | Path) -> Path:
     page = page.replace("__GENERATED__", datetime.now().isoformat(timespec="seconds"))
     page = page.replace("__INITIAL__", _js_json(data))
     page = page.replace("__OBSERVATORIES__", _js_json([to_dict(p) for p in PRESETS.values()]))
+    page = page.replace("__PRESET_RENAMES__", _js_json(RENAME_MAP))
     page = page.replace("__PALETTE__", _js_json(PALETTE))
     page = page.replace("__SHADE__", _js_json(shade))
     for token, value in (

@@ -35,33 +35,52 @@ PRESETS: dict[str, Observatory] = {
     obs.name: obs
     for obs in [
         Observatory("Calar Alto", 37.2327, -2.6009, 2189.0, "Europe/Madrid"),
-        Observatory("CTIO (Cerro Tololo)", -30.1691, -70.8067, 2200.0, "America/Santiago"),
-        Observatory("Gemini North (Mauna Kea)", 19.8227, -155.4737, 2731.0, "Pacific/Honolulu"),
-        Observatory("Gemini South (Cerro Pachon)", -30.2440, -70.7379, 2722.0, "America/Santiago"),
-        Observatory("IAC (Roque de los Muchachos)", 28.3127, -16.5017, 2382.0, "Europe/Madrid"),
-        Observatory("Keck I/II (Mauna Kea)", 19.8263, -155.4744, 4145.0, "Pacific/Honolulu"),
+        Observatory("Cerro Paranal (VLT)", -24.6275, -70.4044, 2635.0, "America/Santiago"),
+        Observatory("Cerro Tololo (CTIO)", -30.1691, -70.8067, 2200.0, "America/Santiago"),
+        Observatory("Kitt Peak (NSO)", 31.9583, -111.6017, 2096.0, "America/Phoenix"),
         Observatory("Las Campanas (Carnegie)", -29.2944, -70.7250, 2420.0, "America/Santiago"),
+        Observatory("Mauna Kea (Gemini North)", 19.8227, -155.4737, 2731.0, "Pacific/Honolulu"),
+        Observatory("Mauna Kea (Keck I/II)", 19.8263, -155.4744, 4145.0, "Pacific/Honolulu"),
+        Observatory("Mauna Kea (Subaru)", 19.8257, -155.4746, 4146.0, "Pacific/Honolulu"),
         Observatory(
-            "LBT (Large Binocular Telescope)",
+            "Mount Graham (LBT)",
             lat=32.44278,
             lon=-111.15500,
             elevation_m=2400.0,
             timezone="America/Phoenix",
         ),
-        Observatory("Lick (Mount Hamilton)", 37.3414, -121.6428, 1243.0, "America/Los_Angeles"),
-        Observatory("McDonald (MPE)", 30.6709, -104.5612, 1710.0, "America/Chicago"),
-        Observatory("NOAO (Mount Lemmon)", 35.2009, -111.6075, 2167.0, "America/Phoenix"),
-        Observatory("NSO (Kitt Peak)", 31.9583, -111.6017, 2096.0, "America/Phoenix"),
-        Observatory("Palomar", 33.3564, -116.8650, 1712.0, "America/Los_Angeles"),
-        Observatory("SALT (SAAO)", -32.376, 20.810, 1062.0, "Africa/Johannesburg"),
+        Observatory("Mount Hamilton (Lick)", 37.3414, -121.6428, 1243.0, "America/Los_Angeles"),
+        Observatory("Mount Lemmon (NOAO)", 35.2009, -111.6075, 2167.0, "America/Phoenix"),
+        Observatory("Mount McDonald (MPE)", 30.6709, -104.5612, 1710.0, "America/Chicago"),
+        Observatory("Roque de los Muchachos (IAC)", 28.3127, -16.5017, 2382.0, "Europe/Madrid"),
+        Observatory("San Antonio Mountain (Palomar)", 33.3564, -116.8650, 1712.0, "America/Los_Angeles"),
         Observatory("Siding Spring (AAO)", -31.2733, 149.0644, 1165.0, "Australia/Sydney"),
-        Observatory("Subaru (Mauna Kea)", 19.8257, -155.4746, 4146.0, "Pacific/Honolulu"),
-        Observatory("VLT (Paranal)", -24.6275, -70.4044, 2635.0, "America/Santiago"),
+        Observatory("Sutherland (SALT)", -32.376, 20.810, 1062.0, "Africa/Johannesburg"),
     ]
 }
 
 # Preset used when no workspace exists yet.
-DEFAULT_PRESET = "LBT (Large Binocular Telescope)"
+DEFAULT_PRESET = "Mount Graham (LBT)"
+
+# Old -> new preset display names from the rename to "mountain (facility)".
+# Workspaces, saved site states, and shared links pre-dating the rename are
+# migrated to the new names on load.
+RENAME_MAP: dict[str, str] = {
+    "LBT (Large Binocular Telescope)": "Mount Graham (LBT)",
+    "Subaru (Mauna Kea)": "Mauna Kea (Subaru)",
+    "Keck I/II (Mauna Kea)": "Mauna Kea (Keck I/II)",
+    "Gemini North (Mauna Kea)": "Mauna Kea (Gemini North)",
+    "Gemini South (Cerro Pachon)": "Cerro Pachon (Gemini South)",
+    "VLT (Paranal)": "Cerro Paranal (VLT)",
+    "CTIO (Cerro Tololo)": "Cerro Tololo (CTIO)",
+    "IAC (Roque de los Muchachos)": "Roque de los Muchachos (IAC)",
+    "Lick (Mount Hamilton)": "Mount Hamilton (Lick)",
+    "McDonald (MPE)": "Mount McDonald (MPE)",
+    "NOAO (Mount Lemmon)": "Mount Lemmon (NOAO)",
+    "NSO (Kitt Peak)": "Kitt Peak (NSO)",
+    "Palomar": "San Antonio Mountain (Palomar)",
+    "SALT (SAAO)": "Sutherland (SALT)",
+}
 
 # Sentinel for an observatory edited away from any preset.
 CUSTOM = "Custom"
