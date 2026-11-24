@@ -47,7 +47,8 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
-    "simbadCooParse", "findingStarSize",
+    "simbadCooParse", "findingOffsetText", "findingDetailTable",
+    "findingStarSize",
     "findingGridStep", "findingRadiusText",
     "skyViewPosition", "skyViewQueryUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
@@ -421,6 +422,17 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('$("finding-chart").addEventListener("mousemove"',
                       self.page)
         self.assertIn('"mouseleave"', self.page)
+        self.assertIn('justify-content: flex-start', self.page)
+        self.assertIn('.finding-pane:first-child { flex: 0 0 auto; }',
+                      self.page)
+        self.assertIn('.finding-pane:last-child { flex: 1 1 auto;'
+                      ' min-width: 0; }', self.page)
+        self.assertIn('#finding-info { height: 8.8rem; overflow: hidden;',
+                      self.page)
+        self.assertIn('#finding-info table { border-collapse: collapse;',
+                      self.page)
+        self.assertIn('function findingOffsetText(', self.page)
+        self.assertIn('function findingDetailTable(', self.page)
         self.assertNotIn('id="finding-img"', self.page)
         self.assertNotIn('alasky.cds.unistra.fr', self.page)
         self.assertNotIn('aladin.cds.unistra.fr', self.page)
@@ -816,6 +828,87 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIsNone(got2["mag"])
         self.assertIsNone(got2["spec"])
         self.assertIsNone(got2["plx"])
+
+    def test_simbad_coo_parse(self):
+        """simbadCooParse extracts the full default table column set."""
+        table = (
+            "C.D.S.  -  SIMBAD4 rel 1.8  -  2026.11.24CET17:45:23\n\n"
+            + "coord 18 36 56.30 38 47 01.45 (ICRS, J2000, 2000.0), "
+              "radius: 10 arcmin\n"
+            + "----------------------------------------------------------------------\n\n"
+            + "Number of objects : 2\n\n"
+            + " # |dist(asec)|            identifier             |typ|"
+              "       coord1 (ICRS,J2000/2000)        | Mag U  |  Mag B"
+              "  |  Mag V  |  Mag R  | Mag I  |  spec. type   |#bib"
+              "|#not\n"
+            + "--|----------|-----------------------------------|---|"
+              "---------------------------------------|--------|------"
+              "---|---------|---------|--------|---------------|----"
+              "|----\n"
+            + "1 |      0.46|* alf Lyr                          |dS*|"
+              "18 36 56.33635 +38 47 01.2802          |0.03    |0.03"
+              "     |0.03     |0.07     |0.10    |A0V            |2817"
+              "|   1\n"
+            + "2 |     91.90|2MASS J18370125+3848126            |*  "
+              "|18 37 01.2678131808 +38 48 12.673392336|     ~  |    "
+              "   ~  |9.5      |     ~  |     ~  |~              |   0"
+              "|   0\n"
+        )
+        got = self._js(f"simbadCooParse({json.dumps(table)})")
+        self.assertEqual(got["count"], 2)
+        self.assertEqual(len(got["rows"]), 2)
+        first = got["rows"][0]
+        self.assertEqual(first["name"], "* alf Lyr")
+        self.assertAlmostEqual(
+            first["raDeg"], 18 * 15 + 36 / 4 + 56.33635 / 240,
+            delta=1e-9)
+        self.assertAlmostEqual(
+            first["dec"], 38 + 47 / 60 + 1.2802 / 3600, delta=1e-9)
+        self.assertAlmostEqual(first["u"], 0.03)
+        self.assertAlmostEqual(first["b"], 0.03)
+        self.assertAlmostEqual(first["v"], 0.03)
+        self.assertAlmostEqual(first["r"], 0.07)
+        self.assertAlmostEqual(first["i"], 0.10)
+        self.assertEqual(first["spt"], "A0V")
+        self.assertEqual(first["typ"], "dS*")
+        self.assertAlmostEqual(first["distArcsec"], 0.46)
+        self.assertEqual(first["bib"], 2817)
+        self.assertEqual(first["notn"], 1)
+        second = got["rows"][1]
+        self.assertIsNone(second["u"])
+        self.assertAlmostEqual(second["v"], 9.5)
+        self.assertIsNone(second["spt"])
+        self.assertEqual(second["bib"], 0)
+        self.assertEqual(
+            self._js("simbadCooParse('no table here')")["rows"], [])
+        self.assertIsNone(
+            self._js("simbadCooParse('no table here')")["count"])
+
+    def test_finding_offset_and_detail_table(self):
+        """findingOffsetText units and findingDetailTable row selection."""
+        self.assertEqual(self._js("findingOffsetText(0.75)"), "0.8\u2033")
+        self.assertEqual(self._js("findingOffsetText(59.94)"),
+                         "59.9\u2033")
+        self.assertEqual(self._js("findingOffsetText(91.9)"), "1.53\u2032")
+        self.assertIsNone(self._js("findingOffsetText(null)"))
+        row = {"raDeg": 279.186354, "dec": 38.783639,
+               "u": 0.03, "b": 0.03, "v": 0.03, "r": 0.07, "i": 0.10,
+               "spt": "A0V", "typ": "dS*", "distArcsec": 0.46,
+               "bib": 2817, "notn": 1}
+        html = self._js(f"findingDetailTable({json.dumps(row)})")
+        self.assertIn("<th>RA/Dec</th>", html)
+        self.assertIn("<th>Mags</th><td>U 0.03  B 0.03  V 0.03  "
+                      "R 0.07  I 0.10</td>", html)
+        self.assertIn("<th>SpT</th><td>A0V</td>", html)
+        self.assertIn("<th>Type</th><td>dS*</td>", html)
+        self.assertIn("<th>From target</th><td>0.5\u2033</td>", html)
+        self.assertIn("<th>Bib/Notes</th><td>2817 / 1</td>", html)
+        sparse = {"raDeg": 10.0, "dec": -20.0}
+        html2 = self._js(f"findingDetailTable({json.dumps(sparse)})")
+        self.assertIn("<th>RA/Dec</th>", html2)
+        self.assertNotIn("<th>Mags</th>", html2)
+        self.assertNotIn("<th>SpT</th>", html2)
+        self.assertNotIn("<th>From target</th>", html2)
 
 
     def test_share_fragment_round_trip(self):
