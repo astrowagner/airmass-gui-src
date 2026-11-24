@@ -39,7 +39,7 @@ CORE_END = "/*JS-CORE-END*/"
 
 CORE_FUNCTIONS = [
     "wrap360", "d2r", "r2d", "jdFromUtcMs", "gmstMeeus", "lstDeg", "altitude",
-    "horizonCoords", "parallacticAngle", "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
+    "horizonCoords", "parallacticAngle", "parallacticAngleRate", "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
     "parseDec", "simbadParseRecord",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
@@ -575,6 +575,36 @@ class JsCoreNumericTests(unittest.TestCase):
             self.assertLessEqual(
                 min(dq, 360.0 - dq), 1e-5, msg=(round(jd, 4), round(lat, 2), round(dec, 2))
             )
+            checked += 1
+        self.assertGreaterEqual(checked, 30)
+
+    def test_parallactic_angle_rate(self):
+        """parallacticAngleRate matches the analytic dec = 0 derivative."""
+        # For a declination-0 target the parallactic angle reduces to
+        # q = atan2(cos(lat) sin H, sin(lat)); the 30-s central
+        # difference should recover dq/dH times the hour-angle advance
+        # per minute, where H is the hour angle in radians. The
+        # advance is taken from the core's own lstDeg (sidereal rate)
+        # so LST precision cannot pollute the comparison.
+        rng = random.Random(7)
+        checked = 0
+        for _ in range(40):
+            jd = rng.uniform(2451545.0, 2490000.0)
+            lat = rng.uniform(-55.0, 55.0)
+            lon = rng.uniform(-180.0, 180.0)
+            H_deg = rng.uniform(-80.0, 80.0)
+            lst = self._js(f"lstDeg({jd}, {lon})")
+            ra_h = (lst - H_deg) / 15.0
+            dH_min = (self._js(f"lstDeg({jd + 1 / 1440.0}, {lon})") - lst) % 360.0
+            H = math.radians(H_deg)
+            A = math.cos(math.radians(lat))
+            B = math.sin(math.radians(lat))
+            ref = dH_min * A * B * math.cos(H) / (
+                (A * math.sin(H)) ** 2 + B * B
+            )
+            got = self._js(f"parallacticAngleRate({ra_h}, 0.0, {jd}, {lat}, {lon})")
+            self.assertAlmostEqual(got, ref, delta=1e-4,
+                                   msg=(round(jd, 4), round(lat, 2)))
             checked += 1
         self.assertGreaterEqual(checked, 30)
 

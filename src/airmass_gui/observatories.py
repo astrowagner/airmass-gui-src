@@ -44,10 +44,19 @@ PRESETS: dict[str, Observatory] = {
         Observatory("Keck I/II (Mauna Kea)", 19.8263, -155.4744, 4145.0, "Pacific/Honolulu"),
         Observatory("Subaru (Mauna Kea)", 19.8257, -155.4746, 4146.0, "Pacific/Honolulu"),
         Observatory("Gemini North (Mauna Kea)", 19.8227, -155.4737, 2731.0, "Pacific/Honolulu"),
+        Observatory("Palomar", 33.3564, -116.8650, 1712.0, "America/Los_Angeles"),
+        Observatory("Lick (Mount Hamilton)", 37.3414, -121.6428, 1243.0, "America/Los_Angeles"),
+        Observatory("NSO (Kitt Peak)", 31.9583, -111.6017, 2096.0, "America/Phoenix"),
+        Observatory("NOAO (Mount Lemmon)", 35.2009, -111.6075, 2167.0, "America/Phoenix"),
+        Observatory("McDonald (MPE)", 30.6709, -104.5612, 1710.0, "America/Chicago"),
         Observatory("VLT (Paranal)", -24.6275, -70.4044, 2635.0, "America/Santiago"),
+        Observatory("Las Campanas (Carnegie)", -29.2944, -70.7250, 2420.0, "America/Santiago"),
         Observatory("Gemini South (Cerro Pachon)", -30.2440, -70.7379, 2722.0, "America/Santiago"),
         Observatory("CTIO (Cerro Tololo)", -30.1691, -70.8067, 2200.0, "America/Santiago"),
-        Observatory("McDonald (MPE)", 30.6709, -104.5612, 1710.0, "America/Chicago"),
+        Observatory("SALT (SAAO)", -32.376, 20.810, 1062.0, "Africa/Johannesburg"),
+        Observatory("Siding Spring (AAO)", -31.2733, 149.0644, 1165.0, "Australia/Sydney"),
+        Observatory("Calar Alto", 37.2327, -2.6009, 2189.0, "Europe/Madrid"),
+        Observatory("IAC (Roque de los Muchachos)", 28.3127, -16.5017, 2382.0, "Europe/Madrid"),
     ]
 }
 
