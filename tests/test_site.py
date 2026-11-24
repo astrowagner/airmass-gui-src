@@ -46,7 +46,8 @@ CORE_FUNCTIONS = [
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "horizonsParse", "fieldRotationDeg",
-    "gnomonicProject", "simbadCooParse", "findingStarSize",
+    "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
+    "simbadCooParse", "findingStarSize",
     "findingGridStep", "findingRadiusText",
     "skyViewPosition", "skyViewQueryUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
@@ -413,6 +414,13 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('Sky image (SkyView)', self.page)
         self.assertIn('function updateFindingChart(', self.page)
+        self.assertIn('id="finding-info"', self.page)
+        self.assertIn("Hover the star chart for object info", self.page)
+        self.assertIn('function updateFindingInfo(', self.page)
+        self.assertIn('function clearFindingInfo(', self.page)
+        self.assertIn('$("finding-chart").addEventListener("mousemove"',
+                      self.page)
+        self.assertIn('"mouseleave"', self.page)
         self.assertNotIn('id="finding-img"', self.page)
         self.assertNotIn('alasky.cds.unistra.fr', self.page)
         self.assertNotIn('aladin.cds.unistra.fr', self.page)
