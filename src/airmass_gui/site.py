@@ -356,8 +356,8 @@ footer li { margin-bottom: 0.2rem; }
     <div id="targets"></div>
     <div class="add-row">
       <input id="new-name" placeholder="Name">
-      <input id="new-ra" placeholder="RA  h:m:s / deg">
-      <input id="new-dec" placeholder="Dec d:m:s / deg">
+      <input id="new-ra" placeholder="RA  h m s / h:m:s / deg">
+      <input id="new-dec" placeholder="Dec d m s / d:m:s / deg">
       <button id="simbad-btn" title="Look up this name in CDS Simbad">Simbad</button>
       <button id="add-btn">Add</button>
     </div>
@@ -1586,8 +1586,8 @@ function _parts(text) {
 /**
  * Parse a right ascension entry to decimal hours.
  *
- * Accepts h:m:s, h m s, decimal hours, or decimal degrees (values > 24
- * are divided by 15).
+ * Accepts h:m:s, two or three space-separated numbers (h m s),
+ * decimal hours, or decimal degrees (values > 24 are divided by 15).
  *
  * @param {string} text - RA entry.
  * @returns {number} RA in hours, [0, 24).
@@ -1596,8 +1596,14 @@ function _parts(text) {
 function parseRa(text) {
   var s = String(text).trim();
   if (!s) throw new Error("RA is empty");
+  var vals = null;
   if (s.indexOf(":") >= 0 || /[hms]/.test(s.toLowerCase())) {
-    var vals = _parts(s);
+    vals = _parts(s);
+  } else {
+    var tokens = s.split(/\s+/);
+    if (tokens.length >= 2 && tokens.length <= 3) vals = tokens.map(Number);
+  }
+  if (vals !== null) {
     if (vals.length < 1 || vals.length > 3 || vals.some(function (v) { return !isFinite(v); })) {
       throw new Error("unparseable RA: " + text);
     }
@@ -1615,8 +1621,9 @@ function parseRa(text) {
 /**
  * Parse a declination entry to decimal degrees.
  *
- * Accepts d:m:s, d m s, or decimal degrees; a negative leading degree
- * part, or a leading '-', signs the whole entry.
+ * Accepts d:m:s, two or three space-separated numbers (d m s), or
+ * decimal degrees; a negative leading degree part, or a leading '-',
+ * signs the whole entry.
  *
  * @param {string} text - Dec entry.
  * @returns {number} Declination in degrees, [-90, 90].
@@ -1625,8 +1632,14 @@ function parseRa(text) {
 function parseDec(text) {
   var s = String(text).trim();
   if (!s) throw new Error("Dec is empty");
+  var vals = null;
   if (s.indexOf(":") >= 0 || /[\u00b0\u2032\u2033]/.test(s) || /[dms]/.test(s.toLowerCase())) {
-    var vals = _parts(s);
+    vals = _parts(s);
+  } else {
+    var tokens = s.split(/\s+/);
+    if (tokens.length >= 2 && tokens.length <= 3) vals = tokens.map(Number);
+  }
+  if (vals !== null) {
     if (vals.length < 1 || vals.length > 3 || vals.some(function (v) { return !isFinite(v); })) {
       throw new Error("unparseable Dec: " + text);
     }
@@ -2962,8 +2975,8 @@ function renderTargets() {
     row.innerHTML =
       '<input type="color" title="Color">' +
       '<input placeholder="Name" title="Name">' +
-      '<input placeholder="RA (h:m:s / deg)" title="RA">' +
-      '<input placeholder="Dec (d:m:s / deg)" title="Dec">' +
+      '<input placeholder="RA (h m s / h:m:s / deg)" title="RA">' +
+      '<input placeholder="Dec (d m s / d:m:s / deg)" title="Dec">' +
       '<input placeholder="V mag" title="V magnitude" inputmode="decimal">' +
       '<span class="info" title="Ephemeris status; click the cross to clear the Simbad record and ephemeris"></span>' +
       '<button class="sb" title="Refresh this target\'s Simbad record (parallax, distance, proper motion, identifiers)" type="button">&#8635;</button>' +

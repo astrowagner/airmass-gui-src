@@ -182,6 +182,32 @@ class ParseTest(unittest.TestCase):
         for dec in (-0.2990944, -0.5, -0.0125, -1.0):
             self.assertAlmostEqual(parse_dec(format_dec_dms(dec)), dec, places=5)
 
+    def test_ra_space_separated(self):
+        """Two or three space-separated numbers are sexagesimal.
+
+        Simbad prints coordinates space-separated (18 36 56.3); a
+        single number keeps its present meaning (hours for RA, with
+        values > 24 read as degrees).
+        """
+        self.assertAlmostEqual(parse_ra("18 36 56.3"), 18 + 36 / 60 + 56.3 / 3600, places=9)
+        self.assertAlmostEqual(parse_ra("5 55 40.8"), 5 + 55 / 60 + 40.8 / 3600, places=9)
+        self.assertAlmostEqual(parse_ra("7.5"), 7.5, places=9)
+        self.assertAlmostEqual(parse_ra("279.2346"), 279.2346 / 15.0, places=9)
+        with self.assertRaises(ValueError):
+            parse_ra("1 2 3 4")
+
+    def test_dec_space_separated(self):
+        """Two or three space-separated numbers are sexagesimal decs.
+
+        A leading "-" signs the whole entry, including entries whose
+        degree part is 0 (Simbad prints delta Ori as -00 17 56.74).
+        """
+        self.assertAlmostEqual(parse_dec("-00 17 57"), -(17 / 60 + 57 / 3600), places=9)
+        self.assertAlmostEqual(parse_dec("+38 47 01.28"), 38 + 47 / 60 + 1.28 / 3600, places=9)
+        self.assertAlmostEqual(parse_dec("45"), 45.0, places=9)
+        with self.assertRaises(ValueError):
+            parse_dec("1 2 3 4")
+
     def test_invalid(self):
         """Garbage RA/Dec raises ValueError."""
         with self.assertRaises(ValueError):
@@ -203,6 +229,26 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(format_dec_dms(38 + 47 / 60 + 1.45 / 3600), "+38:47:01.45")
         self.assertEqual(format_dec_dms(-30.244), "-30:14:38.40")
 
+    def test_format_seconds_carry(self):
+        """Seconds round to hundredths first, then carry into minutes.
+
+        Rounding a seconds field up to 60 must carry into the minutes,
+        which can carry into the degrees or the day, instead of
+        printing a negative seconds field.
+        """
+        def hours(h, m, s):
+            return (h + m / 60.0 + s / 3600.0) * 15.0
+
+        def deg(d, m, s):
+            return d + m / 60.0 + s / 3600.0
+
+        self.assertEqual(format_ra_hours(hours(18, 36, 59.97)), "18:36:59.97")
+        self.assertEqual(format_dec_dms(deg(38, 47, 59.97)), "+38:47:59.97")
+        self.assertEqual(format_ra_hours(hours(18, 36, 59.996)), "18:37:00.00")
+        self.assertEqual(format_dec_dms(deg(38, 59, 59.996)), "+39:00:00.00")
+        self.assertEqual(format_ra_hours(hours(23, 59, 59.996)), "00:00:00.00")
+        self.assertEqual(format_dec_dms(-deg(0, 17, 56.74)), "-00:17:56.74")
+
 
 class FigureTest(unittest.TestCase):
     """render_figure layout: dual axes, tick agreement, label extents."""
@@ -221,6 +267,21 @@ class FigureTest(unittest.TestCase):
             self.assertIsNotNone(fig)
             self.assertTrue(out.exists())
             self.assertGreater(out.stat().st_size, 5000)
+
+    def test_figure_not_leaked_to_pyplot(self):
+        """render_figure registers no figure with pyplot.
+
+        The desktop app calls render_figure on every redraw; figures
+        made with pyplot stay registered and pile up (25 after 25
+        redraws). A standalone Figure keeps pyplot's list empty.
+        """
+        import matplotlib.pyplot as plt
+
+        plt.close("all")
+        data = new_workspace()
+        for _ in range(25):
+            render_figure(data)
+        self.assertEqual(plt.get_fignums(), [])
 
     def test_axes_layout(self):
         """Airmass axis inverted at true altitudes, altitude axis 0-90 deg, both axes agreeing; labels have non-zero extents."""
@@ -248,7 +309,11 @@ class FigureTest(unittest.TestCase):
         self.assertEqual([lab.get_text() for lab in alt_ax.get_yticklabels()],
                          [f"{int(t)}\u00b0" for t in ALT_TICKS])
         # Both axes must agree: the X = 2 tick pixel reads as its true altitude.
-        renderer = fig.canvas.get_renderer()
+        # render_figure builds a standalone Figure with no backend canvas, so
+        # the test attaches an Agg canvas for pixel measurement only.
+        import matplotlib.backends.backend_agg as backend_agg
+
+        renderer = backend_agg.FigureCanvasAgg(fig).get_renderer()
         x2_alt = float(altitude_from_airmass(np.array([2.0]))[0])
         px = ax.transData.transform((0, x2_alt))[1]
         self.assertAlmostEqual(alt_ax.transData.inverted().transform((0, px))[1], x2_alt, places=4)

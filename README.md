@@ -102,8 +102,11 @@ work with any JSON workspace file.
 
 ## Targets
 
-- RA: `HH:MM:SS.ss`, `HHhMMmSSs`, decimal hours, or decimal degrees (values > 24).
-- Dec: `DD:MM:SS.ss`, `DDdMMmSSs`, or decimal degrees.
+- RA: `HH:MM:SS.ss`, `HHhMMmSSs`, `HH MM SS` (space-separated), decimal hours,
+  or decimal degrees (values > 24).
+- Dec: `DD:MM:SS.ss`, `DDdMMmSSs`, `DD MM SS` (space-separated), or decimal
+  degrees. A leading `-` signs the whole entry (Simbad prints decs between
+  0 and -1 deg as `-00 MM SS`).
 - Name lookup: type a name (e.g. `Vega`) and press **Lookup (Simbad)** — coordinates
   are fetched from CDS Simbad, filled in, and the target is added. Requires internet
   access to `simbad.u-strasbg.fr` (or `simbad.cds.unistra.fr`).

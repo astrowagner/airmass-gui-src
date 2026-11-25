@@ -18,7 +18,7 @@ from matplotlib.backends.backend_tkagg import (  # noqa: E402
 
 from . import __version__, lookup  # noqa: E402
 from .astro import format_dec_dms, format_ra_hours, sky_coord_from_entries  # noqa: E402
-from .chart import FIG_BG, render_figure  # noqa: E402
+from .chart import FIG_BG, PALETTE, render_figure  # noqa: E402
 from .observatories import CUSTOM, PRESETS, Observatory, from_dict, to_dict  # noqa: E402
 from .workspace import default_path, load, new_workspace, save  # noqa: E402
 
@@ -697,4 +697,3 @@ class App:
             f"Workspace: {self.workspace_path}\n"
             "(auto-saved on every change and on exit)",
         )
-from .chart import FIG_BG, PALETTE, render_figure  # noqa: E402

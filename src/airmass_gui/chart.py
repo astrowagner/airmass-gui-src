@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from astropy import units as u
 from astropy.time import Time
 
@@ -196,9 +197,16 @@ def render_figure(data: dict, out_path=None):
     Returns
     -------
     matplotlib.figure.Figure
+        The rendered figure. It is not registered with pyplot, so the
+        caller is responsible for closing it once its canvas or PNG
+        is done with it.
     """
     obs, start, end, tz = _parse_range(data)
-    fig, ax = plt.subplots(figsize=(10.5, 5.2), facecolor=FIG_BG)
+    # A standalone Figure (not plt.subplots) so pyplot registers nothing:
+    # the desktop app redraws on every change and stacked figures would
+    # pile up.
+    fig = Figure(figsize=(10.5, 5.2), facecolor=FIG_BG)
+    ax = fig.add_subplot(111)
 
     for mjd_a, mjd_b, kind in sun_shading_intervals(obs, start, end):
         color, alpha = SHADE[kind]

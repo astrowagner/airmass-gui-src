@@ -285,8 +285,8 @@ def _parts(text: str) -> list[float]:
 def parse_ra(text: str) -> float:
     """Parse a right ascension entry to decimal hours.
 
-    Accepts h:m:s, h m s, decimal hours, or decimal degrees (values > 24
-    are divided by 15).
+    Accepts h:m:s, two or three space-separated numbers (h m s),
+    decimal hours, or decimal degrees (values > 24 are divided by 15).
 
     Parameters
     ----------
@@ -307,8 +307,17 @@ def parse_ra(text: str) -> float:
     s = text.strip()
     if not s:
         raise ValueError("RA is empty")
+    vals = None
     if ":" in s or any(ch in s.lower() for ch in "hms"):
         vals = _parts(s)
+    else:
+        tokens = s.split()
+        if 2 <= len(tokens) <= 3:
+            try:
+                vals = [float(token) for token in tokens]
+            except ValueError:
+                raise ValueError(f"unparseable RA: {text!r}") from None
+    if vals is not None:
         if not 1 <= len(vals) <= 3:
             raise ValueError(f"unparseable RA: {text!r}")
         while len(vals) < 3:
@@ -326,8 +335,9 @@ def parse_ra(text: str) -> float:
 def parse_dec(text: str) -> float:
     """Parse a declination entry to decimal degrees.
 
-    Accepts d:m:s, d m s, or decimal degrees; a negative leading degree
-    part, or a leading '-', signs the whole entry.
+    Accepts d:m:s, two or three space-separated numbers (d m s), or
+    decimal degrees; a negative leading degree part, or a leading '-',
+    signs the whole entry.
 
     Parameters
     ----------
@@ -348,8 +358,17 @@ def parse_dec(text: str) -> float:
     s = text.strip()
     if not s:
         raise ValueError("Dec is empty")
+    vals = None
     if ":" in s or any(ch in s for ch in "\u00b0\u2032\u2033") or any(ch in s.lower() for ch in "dms"):
         vals = _parts(s)
+    else:
+        tokens = s.split()
+        if 2 <= len(tokens) <= 3:
+            try:
+                vals = [float(token) for token in tokens]
+            except ValueError:
+                raise ValueError(f"unparseable Dec: {text!r}") from None
+    if vals is not None:
         if not 1 <= len(vals) <= 3:
             raise ValueError(f"unparseable Dec: {text!r}")
         while len(vals) < 3:
@@ -400,13 +419,15 @@ def format_ra_hours(degrees: float) -> str:
     Returns
     -------
     str
-        e.g. '18:36:56.34'.
+        e.g. '18:36:56.34'. Seconds are rounded to hundredths before
+        they are carried into minutes, so the seconds field never
+        prints negative.
     """
     hours = (degrees / 15.0) % 24.0
     h = int(hours)
     m = int((hours - h) * 60)
-    s = (hours - h - m / 60.0) * 3600.0
-    if s >= 59.95:
+    s = round((hours - h - m / 60.0) * 3600.0, 2)
+    if s >= 60.0:
         s -= 60.0
         m += 1
     if m >= 60:
@@ -426,13 +447,15 @@ def format_dec_dms(degrees: float) -> str:
     Returns
     -------
     str
-        e.g. '+38:47:01.28'.
+        e.g. '+38:47:01.28'. Seconds are rounded to hundredths before
+        they are carried into minutes, so the seconds field never
+        prints negative.
     """
     sign = "-" if degrees < 0 else "+"
     d = int(abs(degrees))
     m = int((abs(degrees) - d) * 60)
-    s = (abs(degrees) - d - m / 60.0) * 3600.0
-    if s >= 59.95:
+    s = round((abs(degrees) - d - m / 60.0) * 3600.0, 2)
+    if s >= 60.0:
         s -= 60.0
         m += 1
     if m >= 60:
