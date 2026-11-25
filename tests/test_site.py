@@ -493,12 +493,16 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('"finding-panel"', self.page)
         self.assertIn("finding: false", self.page)
         self.assertIn("Finding chart", self.page)
-        self.assertIn('<div id="target-tip"></div>', self.page)
-        self.assertIn("#target-tip { position: fixed", self.page)
+        self.assertIn(
+            '<div id="target-details" style="display:none"></div>',
+            self.page)
+        self.assertIn("#target-details { margin-top: 0.6rem", self.page)
+        self.assertNotIn('id="target-tip"', self.page)
+        self.assertNotIn("function showTargetTip(", self.page)
+        self.assertIn("function renderTargetDetails(", self.page)
         self.assertIn("var findingDetailsCache", self.page)
         self.assertIn("function maybeFetchFindingDetail(", self.page)
         self.assertIn("function targetDetailTable(", self.page)
-        self.assertIn("function showTargetTip(", self.page)
         self.assertIn("function parallaxDistance(", self.page)
 
     def test_script_injection_is_neutralized(self):
@@ -969,6 +973,18 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIsNone(self._js("parallaxDistance(null, 0.36)")["pc"])
         self.assertIsNone(self._js("parallaxDistance(-1, 0.3)")["pc"])
         self.assertIsNone(self._js("parallaxDistance(10, null)")["errPc"])
+
+    def test_target_info_text(self):
+        """targetInfoText shows only the ephemeris point count and the clear cross."""
+        self.assertEqual(self._js("targetInfoText({})"), "")
+        self.assertEqual(
+            self._js("targetInfoText({ephemeris: [[1], [2]]})"),
+            "eph 2 pts \u00d7")
+        self.assertEqual(self._js("targetInfoText({mag: 0.03})"),
+                         "\u00d7")
+        self.assertEqual(
+            self._js('targetInfoText({ephemeris: [[1]], idents: ["a"]})'),
+            "eph 1 pts \u00d7")
 
     def test_target_detail_table(self):
         """targetDetailTable renders every stored Simbad field, counting identifiers from idTotal."""
