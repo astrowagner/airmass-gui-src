@@ -1317,6 +1317,19 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertNotIn("snrOn", self.page)
         self.assertNotIn("normalizeSnr", self.page)
 
+    def test_duration_preset_buttons(self):
+        """The Duration row offers 1/2/3 day presets that re-fire the input handler."""
+        for n in (1, 2, 3):
+            self.assertIn('<button id="days-%d" title=' % n, self.page)
+        self.assertIn("function setDurationDays", self.page)
+        self.assertIn('dispatchEvent(new Event("input"))', self.page)
+
+    def test_moon_glyph_illum_label(self):
+        """The midnight moon glyph is radius 8 and carries its % illumination."""
+        self.assertIn("drawMoonGlyph(mnx, plot.y + 26, 8, mni.elongDeg)", self.page)
+        self.assertIn('Math.round(mni.illum * 100) + "%"', self.page)
+        self.assertIn("mnSpPx > 46", self.page)
+
     def test_moon_phase_info(self):
         """moonPhaseInfo agrees with astropy: elongation, illumination, name, age."""
         from astropy.coordinates.builtin_frames.ecliptic import GeocentricMeanEcliptic

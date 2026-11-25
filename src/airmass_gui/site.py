@@ -311,7 +311,12 @@ footer li { margin-bottom: 0.2rem; }
       <label class="field"><span>Start</span><input id="start" type="text" placeholder="YYYY-MM-DD HH:MM" spellcheck="false"></label>
       <button id="today-btn" title="Center the range on tonight's midnight (keeps the duration)">Today</button>
     </div>
-    <label class="field"><span>Duration (days)</span><input id="days" type="number" step="0.1" min="0.25" max="30"></label>
+    <div class="field-row">
+      <label class="field"><span>Duration (days)</span><input id="days" type="number" step="0.1" min="0.25" max="30"></label>
+      <button id="days-1" title="Set the duration to 1 day">1</button>
+      <button id="days-2" title="Set the duration to 2 days">2</button>
+      <button id="days-3" title="Set the duration to 3 days">3</button>
+    </div>
   </div>
   <div class="panel" id="panel-display">
     <h2>Display</h2>
@@ -426,10 +431,10 @@ footer li { margin-bottom: 0.2rem; }
 <summary>Instructions</summary>
 <ul>
 <li><b>Observatory</b>: pick a preset or enter latitude, longitude, and elevation; the time zone dropdown lists common zones (the current zone is preselected).</li>
-<li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night.</li>
+<li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night; the 1 / 2 / 3 buttons set the duration to one, two, or three days.</li>
 <li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold, the shaded usable bands, and the per-night list; Moon, the twilight overlays, Weather, and Extra info toggle their features.</li>
 <li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, and &#215; removes it.</li>
-<li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph marks each local midnight.</li>
+<li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
 <li><b>Observing windows</b>: per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, and the Moon's phase at mid-night.</li>
 <li><b>Annual calendar</b>: twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
 <li><b>Workspace</b>: save named copies in this browser, import an exported JSON file, export, Copy link (encodes the full setup in the URL), download the chart as a PNG, and reset to the initial state.</li>
@@ -450,7 +455,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Windows: the dashed line marks your airmass threshold; shaded bands show when each target is usable, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold, and the Moon's phase (illumination and name) at mid-night.</li>
 <li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
 <li>Weather (hidden by default; enable it with the Weather checkbox in the Display panel): the cloud band fills the plot with the hourly cloud cover; a rain drop along the top marks hours with precipitation or at least a 40% rain chance and a lightning bolt marks thunderstorm hours (WMO weather codes 95/96/99); each per-night list adds the average clear-sky fraction. The forecast runs from about 16 days back to about 15 days ahead (needs internet).</li>
-<li>Moon symbols: a small glyph at each local midnight shows the Moon&rsquo;s phase; always shown, independent of the Moon curve.</li>
+<li>Moon symbols: a glyph at each local midnight shows the Moon&rsquo;s phase, with its illumination in percent beside it; always shown, independent of the Moon curve.</li>
 <li>Targets: with Extra info checked, each target row also shows its Simbad record (V magnitude, spectral type, parallax) and, when fetched, its Horizons ephemeris point count; click the row's info text to clear it.</li>
 <li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart is drawn in J2000 while the image is centered on the target&rsquo;s equinox-of-date position, so the two agree to about a quarter of a degree; hovering the star chart shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name, angular offset from the cursor, and a detail table (RA/Dec, U B V R I magnitudes, spectral type, object type, offset from the target, and bibliography/note counts); the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 5&deg;, with the current radius shown beside it, and the chart re-scales live as the slider moves.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass and the tooltip adds its altitude, illumination fraction, phase name, and angular separation from each target.</li>
@@ -3445,10 +3450,20 @@ function draw(fast) {
     }
   }
 
-  // moon-phase glyph at each local midnight (always shown)
+  // moon-phase glyph at each local midnight, with its illuminated
+  // fraction in percent beside it (always shown)
+  var mnSpPx = 86400000 * plot.w / (v1 - v0);
   var mnMs = nextLocalMidnight(tz, v0);
   while (mnMs < v1) {
-    drawMoonGlyph(X(mnMs), plot.y + 23, 5, moonElongationDeg(jdFromUtcMs(mnMs)));
+    var mni = moonPhaseInfo(jdFromUtcMs(mnMs));
+    var mnx = X(mnMs);
+    drawMoonGlyph(mnx, plot.y + 26, 8, mni.elongDeg);
+    if (mnSpPx > 46 && mnx + 36 < plot.x + plot.w) {
+      ctx.font = "10px " + FONT;
+      ctx.textAlign = "left";
+      ctx.fillStyle = THEME.fg_dim;
+      ctx.fillText(Math.round(mni.illum * 100) + "%", mnx + 10, plot.y + 30);
+    }
     mnMs = nextLocalMidnight(tz, mnMs + 1);
   }
 
@@ -4657,6 +4672,25 @@ $("days").addEventListener("input", function () {
   invalidateView();
   saveState();
   scheduleRedraw();
+});
+
+/**
+ * Set the window duration from a preset button.
+ *
+ * Writes the duration to the Duration field and refires its input
+ * event so the field's input handler commits the value, invalidates
+ * the view, and saves the state.
+ *
+ * @param {number} n - Duration in days.
+ */
+function setDurationDays(n) {
+  $("days").value = n;
+  $("days").dispatchEvent(new Event("input"));
+}
+[1, 2, 3].forEach(function (n) {
+  $("days-" + n).addEventListener("click", function () {
+    setDurationDays(n);
+  });
 });
 $("windows-chk").addEventListener("change", function () {
   state.options.windows = this.checked;
