@@ -967,7 +967,11 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertEqual(self._js("formatDistance(7.678654, 0.021175)"),
                          "7.68 pc \u00b1 0.02 pc")
         self.assertEqual(self._js("formatDistance(1500, 30)"),
-                         "1.50 kpc \u00b1 0.03 kpc")
+                         "1.500 kpc \u00b1 0.030 kpc")
+        self.assertEqual(self._js("formatDistance(1234.5, 1.5)"),
+                         "1.234 kpc \u00b1 0.002 kpc")
+        self.assertEqual(self._js("formatDistance(3296700, 45123)"),
+                         "3296.7 kpc \u00b1 45.1 kpc")
         self.assertEqual(self._js("formatDistance(12.5)"), "12.5 pc")
         self.assertIsNone(self._js("formatDistance(null, 0.02)"))
         self.assertIsNone(self._js("parallaxDistance(null, 0.36)")["pc"])

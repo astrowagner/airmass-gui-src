@@ -793,8 +793,10 @@ function parallaxDistance(plxMas, plxErrMas) {
  *
  * @param {?number} pc - Distance in pc.
  * @param {?number} errPc - Distance uncertainty in pc, or null.
- * @returns {?string} e.g. "7.68 pc \u00b1 0.02 pc" or "1.240 kpc";
- *     null when pc is null or non-finite.
+ * @returns {?string} e.g. "7.68 pc \u00b1 0.02 pc" or "1.500 kpc \u00b1
+ *     0.030 kpc"; null when pc is null or non-finite. Two decimals in
+ *     pc, three in kpc (one at and above 10 kpc), so the uncertainty
+ *     keeps visible digits instead of rounding to 0.00.
  */
 function formatDistance(pc, errPc) {
   if (pc == null || !isFinite(pc)) return null;
@@ -804,7 +806,7 @@ function formatDistance(pc, errPc) {
     e = (e != null && isFinite(e)) ? e / 1000 : null;
     unit = " kpc";
   }
-  var digits = v >= 10 ? 1 : 2;
+  var digits = v >= 10 ? 1 : (unit === " kpc" ? 3 : 2);
   var s = v.toFixed(digits) + unit;
   if (e != null && isFinite(e) && e > 0)
     s += " \u00b1 " + e.toFixed(digits) + unit;
