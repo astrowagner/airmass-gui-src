@@ -1128,6 +1128,114 @@ class SummaryMoonMidnightTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class CenterNowTests(unittest.TestCase):
+    """The Center button moves the time window to the current time.
+
+    The clock is pinned. The range is 2026-11-25 00:00 to
+    2026-11-27 00:00 America/Phoenix, i.e. 2026-11-25T07:00Z to
+    2026-11-27T07:00Z. Clicking the chart's Center button keeps
+    the window's span and moves it so the current time sits at the
+    window's center. A centered window that would run past the
+    range is slid back into the range, and a view that already
+    shows the full range is left unchanged.
+    """
+
+    RANGE_START = int(datetime(2026, 11, 25, 7, 0,
+                               tzinfo=timezone.utc).timestamp() * 1000)
+    RANGE_END = int(datetime(2026, 11, 27, 7, 0,
+                             tzinfo=timezone.utc).timestamp() * 1000)
+    HOUR = 3600000
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+
+    def _interp(self, clock_ms):
+        """Page interpreter with the clock pinned at the given epoch ms."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs("Date.now = function () { return %d; }; 0"
+                      % clock_ms)
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _centered_window(self, interp, now):
+        """Set the two-day range, park a 12 h window at its start, click Center.
+
+        @param {dukpy.JSInterpreter} interp - Pinned-clock page interpreter.
+        @param {int} now - Pinned clock, epoch ms; the current time.
+        @returns {dict} The view window {t0, t1} after the click, or None.
+        """
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"t\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, threshold: 2.0 },"
+            " time_range: { start: '2026-11-25T00:00', days: 2.0 } });"
+            "view = { t0: %d, t1: %d };"
+            "$('center-now').click(); 0"
+            % (self.RANGE_START, self.RANGE_START + 12 * self.HOUR))
+        return json.loads(interp.evaljs("JSON.stringify(view)"))
+
+    def test_center_moves_window_to_now(self):
+        """The window lands centered on the current time, span unchanged."""
+        now = int(datetime(2026, 11, 25, 19, 0,
+                           tzinfo=timezone.utc).timestamp() * 1000)
+        got = self._centered_window(self._interp(now), now)
+        want = {"t0": now - 6 * self.HOUR, "t1": now + 6 * self.HOUR}
+        self.assertEqual(got, want)
+
+    def test_center_slides_window_back_into_range(self):
+        """A centered window that would run past the range edge is slid in."""
+        now = int(datetime(2026, 11, 27, 6, 0,
+                           tzinfo=timezone.utc).timestamp() * 1000)
+        got = self._centered_window(self._interp(now), now)
+        want = {"t0": now - 11 * self.HOUR, "t1": self.RANGE_END}
+        self.assertEqual(got, want)
+
+    def test_center_leaves_full_range_unchanged(self):
+        """A view that already shows the full range is left alone."""
+        now = int(datetime(2026, 11, 25, 19, 0,
+                           tzinfo=timezone.utc).timestamp() * 1000)
+        interp = self._interp(now)
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"t\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, threshold: 2.0 },"
+            " time_range: { start: '2026-11-25T00:00', days: 2.0 } });"
+            "$('center-now').click(); 0")
+        self.assertIsNone(json.loads(interp.evaljs("JSON.stringify(view)")))
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class JsCoreNumericTests(unittest.TestCase):
     """Evaluate the page's JS core in Duktape and compare against astropy."""
 
