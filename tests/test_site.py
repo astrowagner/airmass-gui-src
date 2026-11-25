@@ -12,6 +12,7 @@ import re
 import urllib.parse
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from urllib.parse import quote, unquote
 from pathlib import Path
 
@@ -1021,6 +1022,75 @@ class TransitTimesRaOfDateTests(unittest.TestCase):
         self.assertIn(
             "precessIcrsToTete(mid.raDeg, mid.dec, jdFromUtcMs(v0)).raDeg / 15",
             self.page)
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class SummaryMoonMidnightTests(unittest.TestCase):
+    """The per-night list gives the Moon's phase at local midnight.
+
+    The illumination changes by up to 6 points in 12 hours, so the
+    listed phase must be evaluated at a local midnight, not at the
+    middle of each day's part of the chart (local noon for a full
+    day).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__",
+                          json.dumps(json.dumps({}))))
+        cls.interp = dukpy.JSInterpreter()
+        cls.interp.evaljs(stubs + ";" + chr(10) + "0")
+        cls.interp.evaljs(script + ";" + chr(10) + "0")
+
+    def test_moon_phase_evaluated_at_local_midnight(self):
+        """Chart 2026-11-20 12:00 to 2026-11-22 12:00, America/Phoenix.
+
+        The three listed days must use 2026-11-21 00:00,
+        2026-11-22 00:00 and 2026-11-22 00:00 local: the first day's
+        part runs to a midnight, the full day to its end midnight,
+        and the last day starts at a midnight.
+        """
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"t\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, threshold: 2.0 },"
+            " time_range: { start: '2026-11-20T12:00', days: 2.0 } });"
+            "var __moonJd = [];"
+            "var __origMpi = moonPhaseInfo;"
+            "moonPhaseInfo = function (jd) {"
+            " __moonJd.push(jd); return __origMpi(jd); }; 0")
+        self.interp.evaljs("renderSummary();")
+        got = json.loads(self.interp.evaljs("JSON.stringify(__moonJd)"))
+        want_ms = [int(datetime(y, m, d, 7, 0, 0,
+                                tzinfo=timezone.utc).timestamp() * 1000)
+                   for (y, m, d) in ((2026, 11, 21), (2026, 11, 22),
+                                     (2026, 11, 22))]
+        self.assertEqual(len(got), 3)
+        for jd, want in zip(got, want_ms):
+            self.assertAlmostEqual(jd, want / 86400000 + 2440587.5,
+                                   delta=1.0 / 86400)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

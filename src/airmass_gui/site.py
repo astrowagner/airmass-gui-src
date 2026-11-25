@@ -3301,9 +3301,11 @@ function summaryData() {
  * Shows the cumulative totals header, then, per target and local day,
  * the window list with durations, the total field rotation accrued
  * while the target is below the airmass threshold (fieldRotationDeg),
- * transit airmass, the Moon's phase at mid-night, the average
- * clear-sky fraction when weather is on, and below-horizon or
- * no-window notes.
+ * transit airmass, the Moon's phase at the local midnight the day's
+ * part of the chart touches (the one that ends it when it runs to a
+ * midnight, else the one that starts it, else the middle of the
+ * part), the average clear-sky fraction when weather is on, and
+ * below-horizon or no-window notes.
  */
 function renderSummary() {
   var box = $("summary");
@@ -3348,7 +3350,18 @@ function renderSummary() {
                      " \u00b7 X " + (isFinite(tr.x) ? tr.x.toFixed(2) : "\u2014"));
         });
       }
-      var mp = moonPhaseInfo(jdFromUtcMs(0.5 * (data.days[di][0] + data.days[di][1])));
+      // Moon phase at the local midnight the day's part touches:
+      // the one that ends it when it runs to a midnight, else the
+      // one that starts it, else the middle of the part.
+      var dpart = data.days[di];
+      var mpAt = dpart[1];
+      var pe = tzParts(data.tz, mpAt);
+      if (pe.hour !== 0 || pe.minute !== 0 || pe.second !== 0) {
+        var ps = tzParts(data.tz, dpart[0]);
+        if (ps.hour === 0 && ps.minute === 0 && ps.second === 0) mpAt = dpart[0];
+        else mpAt = 0.5 * (dpart[0] + dpart[1]);
+      }
+      var mp = moonPhaseInfo(jdFromUtcMs(mpAt));
       parts.push("moon " + Math.round(mp.illum * 100) + "% " + mp.name);
       if (data.weather && data.weather[di] && data.weather[di].clear != null)
         parts.push(Math.round(data.weather[di].clear) + "% clear");
