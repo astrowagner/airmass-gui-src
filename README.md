@@ -3,9 +3,16 @@
 A tkinter GUI for creating airmass (X) charts of astronomical targets as seen from
 an observatory. Default observatory: Mount Graham (LBT). Default demo target: Vega.
 
-## Quick start (no setup)
+## Quick start
 
-From the project directory, run the bundled launcher:
+From the project directory, create the launcher's virtualenv (once):
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
+Then run the bundled launcher:
 
 ```bash
 ./airmass-gui             # open the GUI
@@ -13,7 +20,7 @@ From the project directory, run the bundled launcher:
 ```
 
 The launcher runs the project's local virtualenv (`.venv/`) directly — no
-`pip install` or `source activate` needed.
+`pip install` or `source activate` needed after that.
 
 ## Install
 
@@ -50,7 +57,11 @@ built with that option from `site/default_workspace.json`. A first visit
 — and **Reset** — centers the embedded range on tonight's local midnight,
 keeping its duration; a setup loaded from a `#w=` link or the browser's
 storage keeps its own start.
-It works fully offline; only the Simbad name lookup needs internet. Open it
+All astronomy and rendering run locally in the browser; the page touches
+the network only for the optional live services: open-meteo weather (when
+the Weather checkbox is on), CDS Simbad name lookups and finding-chart
+object queries, and the SkyView quick-query link, which the user opens in
+a new tab. The chart, calendar, and summary work offline. Open the page
 directly in a browser or drop the file into a GitHub Pages repository.
 
 The page is fully interactive: edit the observatory (preset or custom
@@ -127,7 +138,9 @@ work with any JSON workspace file.
   the navigation toolbar icons lighten automatically on the dark background
   (matplotlib >= 3.9).
 - LBT default: 32 deg 42' 05" N, 109 deg 53' 21" W, 3221 m, America/Phoenix.
-- Tests: `python -m unittest discover -s tests -v`
+- Tests: `pip install -e ".[dev]"` (adds pytest and dukpy; dukpy evaluates
+  the page's embedded JavaScript in a JS engine), then
+  `python -m unittest discover -s tests -v`.
 
 ## License
 

@@ -1,10 +1,14 @@
 """Interactive single-file HTML site for airmass charts (headless, github.io-ready).
 
-The generated page is fully self-contained (no external files or network access):
-the chart is drawn on a <canvas>, all astronomy math runs in embedded JavaScript,
-and every control on the page is live. The workspace passed in becomes the
-initial state; user edits persist in the browser via localStorage, and the page
-can export the workspace back to a JSON file the desktop app can open.
+The generated page is fully self-contained in one file (no external files,
+no build step): the chart is drawn on a <canvas>, all astronomy math runs in
+embedded JavaScript, and every control on the page is live. The page uses the
+network only for the optional live services: open-meteo weather, CDS Simbad
+name/coordinate lookups and finding-chart object queries, and the SkyView
+quick-query link, which the user opens in a new tab. The workspace passed in
+becomes the initial state; user edits persist in the browser via localStorage,
+and the page can export the workspace back to a JSON file the desktop app can
+open.
 
 The JS astronomy helpers live between the JS-CORE markers and are pure
 (no DOM / no Intl) so tests can evaluate them in a JS engine and compare
@@ -1103,10 +1107,33 @@ function sunEvents(startMs, endMs, latDeg, lonDeg) {
 // Truncated NAO 1954/ELP theory (105 terms): geocentric ecliptic
 // coordinates in the mean equinox of date, nutation omitted. Ported to
 // ES5 from the astronomy-engine CalcMoon reference
-// (https://github.com/cosinekitty/astronomy, MIT license); the
-// mean-equinox-of-date convention matches precessIcrsToTete above.
-// Agrees with astropy's geocentric apparent position to ~0.015 deg
-// (the residual is nutation + delta T).
+// (https://github.com/cosinekitty/astronomy); the mean-equinox-of-date
+// convention matches precessIcrsToTete above. Agrees with astropy's
+// geocentric apparent position to ~0.015 deg (the residual is nutation
+// + delta T). The ported code is under the MIT license; its copyright
+// and permission notices follow unchanged (see THIRD_PARTY_NOTICES):
+//
+// MIT License
+//
+// Copyright (c) 2019-2025 Don Cross <cosinekitty@gmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 var MOON_PI2 = 2 * Math.PI;
 var MOON_ARC = 3600 * (180 / Math.PI); // arcseconds per radian
 var MOON_EARTH_RADIUS_AU = 6378.1366 / 1.4959787069098932e+8;
@@ -3214,19 +3241,13 @@ function clearSummary() {
 }
 
 /**
- * List the per-target, per-local-night observing windows in the summary panel.
- *
- * A window is a run with X <= threshold; each run is assigned to the local
- * day where it starts (a run crossing midnight is listed in full on its
- * start day). Transit times and their airmass are listed per day.
- */
-
-/**
  * Compute the observing-window data for the summary panel and CSV export.
  *
  * Samples each target's altitude on an at-most-800-point grid over the
- * full range, thresholds it at the chosen max airmass, and groups the
- * resulting runs by local day.
+ * full range, thresholds it at the chosen max airmass (a window is a run
+ * with X <= the threshold), and assigns each run to the local day where it
+ * starts (a run crossing midnight is listed in full on its start day).
+ * Transit times and their airmass are recorded per day.
  *
  * @returns {?Object} null when the time range is unparseable; otherwise
  *     {tz (the resolved time zone), threshold (the max airmass), days
@@ -3574,7 +3595,6 @@ function renderCalendar() {
  * Outputs:
  *   Sets the contents and visibility of #legend.
  */
-var lastLegendKey = null;
 function renderLegend(legend) {
   var key = JSON.stringify(legend);
   if (key !== lastLegendKey) {
@@ -3598,6 +3618,8 @@ function renderLegend(legend) {
   }
   $("legend").style.display = legend.length === 0 ? "none" : "";
 }
+
+var lastLegendKey = null;
 
 /**
  * Build the observing-window CSV for download.
@@ -3643,33 +3665,6 @@ function csvEsc(s) {
   return /["\n,]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
-/**
- * Render the chart for the current state.
- *
- * Draws the twilight shading, the optional open-meteo cloud-cover band
- * (fill height encodes the hourly percentage, capped at 30% of the
- * plot height) and twilight-line overlays, the grid and axis labels of
- * the selected curve
- * (state.options.curve: "airmass", "altitude", or "azimuth"), one curve
- * per target (interpolated from objCoords for moving targets, with
- * segments below the horizon omitted), an optional dashed Moon curve,
- * and, in airmass mode only, the threshold
- * line, the X = 2 reference, and the per-target usable-window bands with
- * transit ticks, and a red now marker (a vertical line with a filled
- * circle at the top of the plot, shown when the current time lies in
- * the view window). The bottom time axis is labeled in the observatory's
- * time zone; the top axis shows the same ticks in UTC.
- *
- * @returns {undefined} Nothing returned.
- *
- * @param {boolean} [fast] - When true, skip re-rendering the summary
- *     and calendar panels, which do not depend on the view window;
- *     used for live redraws while dragging.
- *
- * Outputs: the canvas contents, lastPlot (plot rectangle), lastCurve
- *     (curve mode used), the status bar (empty on success), and —
- *     unless fast — the summary and calendar panels.
- */
 /**
  * Draw a rain teardrop symbol at a point on the chart.
  *
@@ -3751,6 +3746,33 @@ function drawMoonGlyph(x, y, r, elongDeg) {
   ctx.fill();
 }
 
+/**
+ * Render the chart for the current state.
+ *
+ * Draws the twilight shading, the optional open-meteo cloud-cover band
+ * (fill height encodes the hourly percentage, capped at 30% of the
+ * plot height) and twilight-line overlays, the grid and axis labels of
+ * the selected curve
+ * (state.options.curve: "airmass", "altitude", or "azimuth"), one curve
+ * per target (interpolated from objCoords for moving targets, with
+ * segments below the horizon omitted), an optional dashed Moon curve,
+ * and, in airmass mode only, the threshold
+ * line, the X = 2 reference, and the per-target usable-window bands with
+ * transit ticks, and a red now marker (a vertical line with a filled
+ * circle at the top of the plot, shown when the current time lies in
+ * the view window). The bottom time axis is labeled in the observatory's
+ * time zone; the top axis shows the same ticks in UTC.
+ *
+ * @returns {undefined} Nothing returned.
+ *
+ * @param {boolean} [fast] - When true, skip re-rendering the summary
+ *     and calendar panels, which do not depend on the view window;
+ *     used for live redraws while dragging.
+ *
+ * Outputs: the canvas contents, lastPlot (plot rectangle), lastCurve
+ *     (curve mode used), the status bar (empty on success), and —
+ *     unless fast — the summary and calendar panels.
+ */
 function draw(fast) {
   var size = sizeCanvas();
   var w = size.w, h = size.h;

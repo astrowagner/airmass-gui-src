@@ -214,9 +214,9 @@ class App:
     def _build_observatory(self, parent):
         """Build the observatory panel: preset combobox and the latitude, longitude, elevation, and time-zone entries.
 
-    Parameters
-    ----------
-    parent : tkinter.Widget
+        Parameters
+        ----------
+        parent : tkinter.Widget
         Frame to build the panel into.
         """
         frame = ttk.LabelFrame(parent, text="Observatory", padding=6)
@@ -240,9 +240,9 @@ class App:
     def _build_time_range(self, parent):
         """Build the time-range panel: local start stamp and duration in days.
 
-    Parameters
-    ----------
-    parent : tkinter.Widget
+        Parameters
+        ----------
+        parent : tkinter.Widget
         Frame to build the panel into.
         """
         frame = ttk.LabelFrame(parent, text="Time range (local)", padding=6)
@@ -261,9 +261,9 @@ class App:
     def _build_targets(self, parent):
         """Build the targets panel: object listbox, RA/Dec entries, add/update/remove buttons, and the Simbad lookup row.
 
-    Parameters
-    ----------
-    parent : tkinter.Widget
+        Parameters
+        ----------
+        parent : tkinter.Widget
         Frame to build the panel into.
         """
         frame = ttk.LabelFrame(parent, text="Targets", padding=6)
@@ -357,9 +357,9 @@ class App:
     def _on_obs_select(self, _event=None):
         """Fill the observatory fields when a preset is chosen from the combobox.
 
-    Parameters
-    ----------
-    _event : tkinter.Event, optional
+        Parameters
+        ----------
+        _event : tkinter.Event, optional
         Callback event from the widget binding; not used.
         """
         name = self.obs_var.get()
@@ -374,9 +374,9 @@ class App:
     def _on_obs_field_edit(self, _event=None):
         """Mark the observatory Custom when an entry drifts from the selected preset.
 
-    Parameters
-    ----------
-    _event : tkinter.Event, optional
+        Parameters
+        ----------
+        _event : tkinter.Event, optional
         Callback event from the widget binding; not used.
         """
         name = self.obs_var.get()
@@ -398,9 +398,9 @@ class App:
     def _on_change(self, _event=None):
         """Commit the observatory and time-range fields, save, and schedule a redraw.
 
-    Parameters
-    ----------
-    _event : tkinter.Event, optional
+        Parameters
+        ----------
+        _event : tkinter.Event, optional
         Callback event from the widget binding; not used.
         """
         self._commit_observatory()
@@ -441,9 +441,9 @@ class App:
     def _on_select_object(self, _event=None):
         """Load the selected listbox object into the RA/Dec entries.
 
-    Parameters
-    ----------
-    _event : tkinter.Event, optional
+        Parameters
+        ----------
+        _event : tkinter.Event, optional
         Callback event from the widget binding; not used.
         """
         sel = self.obj_list.curselection()
@@ -538,9 +538,9 @@ class App:
     def _lookup(self, _event=None):
         """Start a background Simbad lookup for the name in the lookup entry.
 
-    Parameters
-    ----------
-    _event : tkinter.Event, optional
+        Parameters
+        ----------
+        _event : tkinter.Event, optional
         Callback event from the widget binding; not used.
         """
         name = self.lookup_var.get().strip()
@@ -607,9 +607,9 @@ class App:
     def _redraw(self, *_):
         """Rebuild the chart canvas and navigation toolbar from the workspace.
 
-    Parameters
-    ----------
-    *_
+        Parameters
+        ----------
+        *_
         Callback arguments (a scheduled after() job or event); not used.
         """
         self._redraw_job = None
@@ -636,9 +636,9 @@ class App:
     def _save(self, *_):
         """Save the workspace to disk, reporting failures in the status bar.
 
-    Parameters
-    ----------
-    *_
+        Parameters
+        ----------
+        *_
         Callback arguments (a scheduled after() job or event); not used.
         """
         try:

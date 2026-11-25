@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "dukpy"]
 
 [project.scripts]
 airmass-gui = "airmass_gui.__main__:main"
