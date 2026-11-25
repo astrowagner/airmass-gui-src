@@ -187,9 +187,9 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--button-hover); }
-.target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px auto 22px;
+.target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px auto auto 22px;
               gap: 0.3rem; margin: 0.25rem 0; align-items: center; }
-#targets.extra .target-row { grid-template-columns: 30px 1fr 1fr 1fr 44px 1fr auto 22px; }
+#targets.extra .target-row { grid-template-columns: 30px 1fr 1fr 1fr 44px 1fr auto auto 22px; }
 #targets:not(.extra) .target-row .info { display: none; }
 .target-row .info { font-size: 0.75rem; color: var(--fg-dim); cursor: pointer;
                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -207,10 +207,11 @@ input[type="checkbox"] { flex: none; }
                  margin-bottom: 0.4rem; flex-wrap: wrap; }
 .finding-row label.field { flex: 1 1 180px; margin: 0; }
 #finding-panes { display: flex; gap: 0.6rem; justify-content: flex-start;
-                 flex-wrap: wrap; }
-.finding-pane { position: relative; }
+                 align-items: stretch; }
+.finding-pane { position: relative; display: flex;
+                flex-direction: column; min-width: 0; }
 .finding-pane:first-child { flex: 0 0 auto; }
-.finding-pane:last-child { flex: 1 1 auto; min-width: 0; }
+.finding-pane:last-child { flex: 1 1 300px; }
 .finding-pane canvas { display: block; }
 .finding-caption { font-size: 0.75rem; color: var(--fg-dim); text-align: center;
                    margin-top: 0.25rem; }
@@ -218,14 +219,16 @@ input[type="checkbox"] { flex: none; }
 .finding-link a { color: var(--accent); text-decoration: none; }
 #finding-status { min-height: 1.15em; font-size: 0.8rem; color: var(--fg-dim);
                   margin-top: 0.3rem; }
-#finding-info { height: 8.8rem; overflow-y: auto; margin-top: 0.6rem;
-                font-size: 0.72rem; line-height: 1.4; }
+#finding-info { flex: 1 1 auto; min-height: 8.8rem; overflow-y: auto;
+                margin-top: 0.6rem; font-size: 0.72rem; line-height: 1.4;
+                overflow-wrap: break-word; }
 #finding-info table { border-collapse: collapse; width: 100%;
                       margin: 0.3rem 0 0; }
 #finding-info th, #finding-info td { text-align: left; border: none;
                                      padding: 0; }
 #finding-info th { color: var(--fg-dim); font-weight: normal;
                    white-space: nowrap; padding-right: 0.5rem; }
+#finding-info td { overflow-wrap: break-word; }
 .finding-dim { color: var(--fg-dim); }
 #finding-zoom { accent-color: var(--accent); padding: 0; height: 22px; }
 #finding-zoom-label { flex: none; min-width: 3.2em; text-align: right;
@@ -446,7 +449,7 @@ footer li { margin-bottom: 0.2rem; }
 <li><b>Observatory</b>: pick a preset or enter latitude, longitude, and elevation; the time zone dropdown lists common zones (the current zone is preselected).</li>
 <li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night; the 1 / 2 / 3 buttons set the duration to one, two, or three days.</li>
 <li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold, the shaded usable bands, and the per-night list; Moon, the twilight overlays, Weather, and Extra info toggle their features.</li>
-<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, and &#215; removes it.</li>
+<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
 <li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
 <li><b>Observing windows</b>: per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, and the Moon's phase at mid-night.</li>
 <li><b>Annual calendar</b>: twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
@@ -2894,6 +2897,7 @@ function renderTargets() {
       '<input placeholder="V mag" title="V magnitude" inputmode="decimal">' +
       '<span class="info" title="Ephemeris status; click the cross to clear the Simbad record and ephemeris"></span>' +
       '<button class="hz" title="Fetch this target\'s ephemeris from JPL Horizons (moving objects)" type="button">Horizons</button>' +
+      '<button class="sb" title="Refresh this target\'s Simbad record (parallax, distance, proper motion, identifiers)" type="button">&#8635;</button>' +
       '<button class="rm" title="Remove" type="button">&#215;</button>';
     var kids = row.children;
     kids[0].value = /^#[0-9a-fA-F]{6}$/.test(obj.color || "") ? obj.color : PALETTE[i % PALETTE.length];
@@ -2938,6 +2942,50 @@ function renderTargets() {
         });
     });
     kids[7].addEventListener("click", function () {
+      var nm = obj.name ? String(obj.name).trim() : "";
+      if (!nm) {
+        setStatus("Give this target a name to refresh its Simbad record");
+        return;
+      }
+      setStatus("Refreshing \u201c" + nm + "\u201d from Simbad\u2026");
+      simbadLookup(nm)
+        .then(function (record) {
+          if (isFinite(record.mag)) obj.mag = record.mag;
+          else delete obj.mag;
+          if (record.spec) obj.spec = record.spec; else delete obj.spec;
+          if (isFinite(record.plx)) {
+            obj.plx = record.plx;
+            if (isFinite(record.plxErr)) obj.plxErr = record.plxErr;
+            else delete obj.plxErr;
+          } else { delete obj.plx; delete obj.plxErr; }
+          if (isFinite(record.pmRa) && isFinite(record.pmDec)) {
+            obj.pmRa = record.pmRa;
+            obj.pmDec = record.pmDec;
+            if (isFinite(record.pmRaErr)) obj.pmRaErr = record.pmRaErr;
+            else delete obj.pmRaErr;
+            if (isFinite(record.pmDecErr)) obj.pmDecErr = record.pmDecErr;
+            else delete obj.pmDecErr;
+          } else {
+            delete obj.pmRa; delete obj.pmDec;
+            delete obj.pmRaErr; delete obj.pmDecErr;
+          }
+          if (isFinite(record.rv)) obj.rv = record.rv; else delete obj.rv;
+          if (record.fluxes && Object.keys(record.fluxes).length > 0)
+            obj.fluxes = record.fluxes; else delete obj.fluxes;
+          if (record.idents && record.idents.length > 0) {
+            obj.idents = record.idents.slice(0, 12);
+            obj.idTotal = record.idTotal != null ? record.idTotal
+                                                 : record.idents.length;
+          } else { delete obj.idents; delete obj.idTotal; }
+          renderTargets();
+          afterTargetChange();
+          setStatus("Updated \u201c" + record.name + "\u201d from Simbad");
+        })
+        .catch(function (error) {
+          setStatus(error.message);
+        });
+    });
+    kids[8].addEventListener("click", function () {
       state.objects.splice(i, 1);
       renderTargets();
       afterTargetChange();
@@ -5249,9 +5297,7 @@ function weatherHours() {
  * Look up a target name in SIMBAD, trying each mirror in turn.
  *
  * @param {string} name - Object name or identifier.
- * @returns {Promise<{name: string, raDeg: number, dec: number,
- *     mag: ?number, spec: ?string, plx: ?number}>} Record per
- *     simbadParseRecord.
+ * @returns {Promise<Object>} Record per simbadParseRecord.
  * @throws {Error} When every mirror fails.
  */
 async function simbadLookup(name) {
@@ -5413,6 +5459,7 @@ $("simbad-btn").addEventListener("click", function () {
 // --------------------------------------------------------------- finding chart
 var FINDING_DRAW_CAP = 400;   // max stars with a known V magnitude drawn
 var FINDING_NOV_CAP = 100;    // max stars without a V magnitude drawn
+var INFO_RESERVE_PX = 300;    // width kept for the hover-info column, px
 var findingCache = {};       // (center, radius) key -> parsed sim-coo table
 var findingSeq = 0;          // token that invalidates stale in-flight queries
 var findingHover = null;  // {center, rows, radiusArcmin, label, centerIdx}
@@ -5479,15 +5526,17 @@ async function simbadCooLookup(raDeg, decDeg, radiusArcmin) {
 /**
  * Size the finding-chart canvas for the current layout.
  *
- * The star chart is the only pane in the row, so it takes the row's
- * width (minus the gap allowance), clamped to [220, 480] px.
+ * The star chart and the hover-info column share the row, so the
+ * chart takes the row's width minus the gap and INFO_RESERVE_PX for
+ * the info column, clamped to [220, 480] px.
  *
  * @returns {number} Chart canvas side, px.
  */
 function findingCanvasSize() {
   var panes = $("finding-panes");
   var cw = panes ? panes.clientWidth : 0;
-  return Math.min(480, Math.max(220, Math.floor((cw || 900) - 6)));
+  return Math.min(480, Math.max(220, Math.floor((cw || 900) - 6
+                                                 - INFO_RESERVE_PX)));
 }
 
 /**

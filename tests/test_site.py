@@ -308,6 +308,13 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("#targets.extra .target-row", self.page)
         self.assertIn("#targets:not(.extra) .target-row .info", self.page)
 
+    def test_target_simbad_refresh(self):
+        """Each target row can refresh its stored Simbad record."""
+        self.assertIn('class="sb" title="Refresh this target', self.page)
+        self.assertIn("Refreshing \\u201c", self.page)
+        self.assertIn('30px 1fr 1fr 1fr 44px auto auto 22px', self.page)
+        self.assertIn('30px 1fr 1fr 1fr 44px 1fr auto auto 22px', self.page)
+
     def test_today_button(self):
         """The Start field is plain 24-hour text and Today centers the range on tonight."""
         self.assertIn('<input id="start" type="text"', self.page)
@@ -421,7 +428,8 @@ class SitePageTests(unittest.TestCase):
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
         zoom slider and survey selector, a star-chart canvas, the SkyView
-        page link, the Simbad coo lookup, and a resizable panel."""
+        page link, the Simbad coo lookup, and a resizable panel with a
+        fixed hover-info column on the right of the chart."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -472,10 +480,16 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('justify-content: flex-start', self.page)
         self.assertIn('.finding-pane:first-child { flex: 0 0 auto; }',
                       self.page)
-        self.assertIn('.finding-pane:last-child { flex: 1 1 auto;'
-                      ' min-width: 0; }', self.page)
-        self.assertIn('#finding-info { height: 8.8rem; overflow-y: auto;',
+        self.assertIn('.finding-pane { position: relative; display: flex;\n'
+                      '                flex-direction: column; min-width: 0; }',
                       self.page)
+        self.assertIn('.finding-pane:last-child { flex: 1 1 300px; }',
+                      self.page)
+        self.assertIn('#finding-info { flex: 1 1 auto; min-height: 8.8rem;'
+                      ' overflow-y: auto;', self.page)
+        self.assertIn('#finding-info td { overflow-wrap: break-word; }',
+                      self.page)
+        self.assertIn('INFO_RESERVE_PX', self.page)
         self.assertIn('#finding-info table { border-collapse: collapse;',
                       self.page)
         self.assertIn('function findingOffsetText(', self.page)
