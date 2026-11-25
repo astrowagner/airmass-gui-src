@@ -108,7 +108,7 @@ THEMES = {
         "button": "#2b0e00",
         "button_hover": "#3f1600",
         "axes_bg": "#0a0200",
-        "shade": 0.5,
+        "shade": 0.35,
     },
 }
 
