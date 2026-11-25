@@ -51,6 +51,8 @@ CORE_FUNCTIONS = [
     "findingStarSize",
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
     "skyViewPosition", "skyViewQueryUrl",
+    "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
+    "weatherSymbolKind",
     "blendHex",
 ]
 
@@ -1296,6 +1298,8 @@ class JsCoreNumericTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self._js("horizonsParse('ERROR: no rows here')")
 
+
+
     def test_instructions_dropdown(self):
         """The footer carries an Instructions dropdown; the header keeps only the title."""
         self.assertIn('<details id="instructions">', self.page)
@@ -1313,6 +1317,41 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertNotIn("snrOn", self.page)
         self.assertNotIn("normalizeSnr", self.page)
 
+    def test_moon_phase_info(self):
+        """moonPhaseInfo agrees with astropy: elongation, illumination, name, age."""
+        from astropy.coordinates.builtin_frames.ecliptic import GeocentricMeanEcliptic
+        for jd in (2458000.5, 2460000.5, 2461130.5, 2463000.5):
+            t = Time(jd, format="jd")
+            moon = get_body("moon", t, location=EarthLocation(x=0, y=0, z=0, unit="m"))
+            sun = get_sun(t)
+            want_e = (moon.transform_to(GeocentricMeanEcliptic(equinox=t)).lon.deg -
+                      sun.transform_to(GeocentricMeanEcliptic(equinox=t)).lon.deg) % 360
+            sep = moon.separation(sun)
+            want_illum = (1 - math.cos(math.radians(sep.deg))) / 2
+            got = json.loads(self._js("JSON.stringify(moonPhaseInfo(%f))" % jd))
+            self.assertAlmostEqual(got["elongDeg"], want_e, delta=0.7, msg=jd)
+            self.assertAlmostEqual(got["illum"], want_illum, delta=0.005, msg=jd)
+            names = ["new moon", "waxing crescent", "first quarter",
+                     "waxing gibbous", "full moon", "waning gibbous",
+                     "last quarter", "waning crescent"]
+            self.assertEqual(got["name"],
+                             names[int((got["elongDeg"] + 22.5) % 360 // 45) % 8],
+                             msg=jd)
+            self.assertAlmostEqual(got["ageDays"],
+                                   got["elongDeg"] / 360 * 29.530589, places=12)
+            mp = json.loads(self._js("JSON.stringify(moonPhase(%f))" % jd))
+            self.assertEqual(got["illum"], mp["illum"])
+
+    def test_weather_symbols(self):
+        """weatherSymbolKind classifies storm, rain, or nothing."""
+        self.assertEqual(
+            self._js("weatherSymbolKind({prec: 0.5, wc: 2, pp: 10})"), "rain")
+        self.assertEqual(
+            self._js("weatherSymbolKind({wc: 95, prec: 0, pp: 0})"), "storm")
+        self.assertTrue(
+            self._js("weatherSymbolKind({prec: 0, wc: 2, pp: 30}) === null"))
+        self.assertEqual(
+            self._js("weatherSymbolKind({prec: 0, wc: null, pp: 40})"), "rain")
 
 
 if __name__ == "__main__":

@@ -374,7 +374,8 @@ var __ctx = {
   measureText: function (s) { return { width: String(s).length * 6.5 }; }
 };
 ["arc","beginPath","clearRect","clip","closePath","fill","fillRect","fillText","lineTo","moveTo",
- "rect","restore","rotate","save","setLineDash","setTransform","stroke","strokeRect","translate"].forEach(function (m) {
+ "ellipse","quadraticCurveTo","rect","restore","rotate","save","setLineDash",
+ "setTransform","stroke","strokeRect","translate"].forEach(function (m) {
     __ctx[m] = function () {};
   });
 
