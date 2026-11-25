@@ -23,7 +23,7 @@ from astropy.time import Time
 
 from airmass_gui import astro, chart, lookup, sn
 from airmass_gui.observatories import PRESETS, RENAME_MAP, to_dict
-from airmass_gui.site import build_site
+from airmass_gui.site import THEMES, _blend_hex, build_site
 from airmass_gui.workspace import new_workspace
 
 try:
@@ -53,6 +53,7 @@ CORE_FUNCTIONS = [
     "skyViewPosition", "skyViewQueryUrl",
     "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
     "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
+    "blendHex",
 ]
 
 RA_OK = ["18:36:56.30142", "18.616h", "279.2346", "0", "23:59:59.9", "7.5"]
@@ -361,11 +362,32 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("migratePresetRename(s);", self.page)
 
     def test_embedded_shade_colors(self):
-        """SHADE maps each level to a 6-digit hex color."""
+        """SHADE maps each level to a [hex, alpha] blending recipe."""
         shade = _embedded_json(self.page, "SHADE")
         self.assertEqual(set(shade), set(chart.SHADE))
-        for color in shade.values():
+        for kind, (color, alpha) in chart.SHADE.items():
+            self.assertEqual(shade[kind], [color, alpha])
             self.assertRegex(color, r"^#[0-9a-f]{6}$")
+
+    def test_embedded_themes(self):
+        """THEMES embeds all three color themes as hex-color JSON."""
+        themes = _embedded_json(self.page, "THEMES")
+        self.assertEqual(themes, THEMES)
+        for name, entry in themes.items():
+            for key, value in entry.items():
+                self.assertRegex(value, r"^#[0-9a-f]{6}$", (name, key))
+
+    def test_theme_selector(self):
+        """The header offers the three themes with a change handler."""
+        self.assertIn('<select id="theme-sel">', self.page)
+        for value, label in (("dark", "Dark"), ("light", "Light"),
+                             ("red", "Red (night)")):
+            self.assertIn(
+                '<option value="%s">%s</option>' % (value, label), self.page)
+        self.assertIn('$("theme-sel").addEventListener("change"', self.page)
+        self.assertIn('html[data-theme="red"] body { filter:', self.page)
+        self.assertIn('localStorage.getItem("airmass-gui-theme")', self.page)
+        self.assertIn('localStorage.setItem("airmass-gui-theme"', self.page)
 
     def test_js_core_markers(self):
         """The JS-CORE BEGIN/END markers are present."""
@@ -814,6 +836,25 @@ class JsCoreNumericTests(unittest.TestCase):
     def test_horizon_and_inverse(self):
         """horizonX and altFromAirmass agree with the Python functions to 1e-6."""
         self.assertAlmostEqual(self._js("horizonX()"), astro.horizon_airmass(), delta=1e-9)
+
+    def test_blend_hex(self):
+        """blendHex agrees with the Python _blend_hex for random colors."""
+        self.assertEqual(self._js("blendHex('#123456', 0, '#fedcba')"),
+                         "#fedcba")
+        self.assertEqual(self._js("blendHex('#123456', 1, '#fedcba')"),
+                         "#123456")
+        rng = random.Random(42)
+        digits = "0123456789abcdef"
+        for _ in range(25):
+            fg = "#" + "".join(rng.choice(digits) for _ in range(6))
+            bg = "#" + "".join(rng.choice(digits) for _ in range(6))
+            alpha = round(rng.random(), 2)
+            expected = _blend_hex(fg, alpha, bg)
+            got = self._js("blendHex('%s', %r, '%s')" % (fg, alpha, bg))
+            for i in (1, 3, 5):
+                self.assertAlmostEqual(
+                    int(got[i : i + 2], 16), int(expected[i : i + 2], 16),
+                    delta=1.0)
         for x in (1.0, 1.2, 2.0, 5.0, 10.0, 30.0, 37.9):
             got = self._js(f"altFromAirmass({x})")
             expected = float(astro.altitude_from_airmass(x)[0])

@@ -329,6 +329,10 @@ function __makeEl(tag, id) {
     __innerHTML: "",
     __handlers: {}
   };
+  el.style.setProperty = function (k, v) { this[k] = v; };
+  el.style.getPropertyValue = function (k) {
+    return (k in this) ? this[k] : "";
+  };
   el.setAttribute = function (k, v) { this[k] = v; };
   el.getAttribute = function (k) { return (k in this) ? this[k] : null; };
   el.hasAttribute = function (k) { return k in this; };
@@ -388,6 +392,7 @@ __canvas.parentElement.getBoundingClientRect = function () {
 };
 
 document = {
+  documentElement: __makeEl("html"),
   body: __makeEl("body"),
   createElement: function (tag) { return __makeEl(tag); },
   getElementById: function (id) {

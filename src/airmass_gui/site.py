@@ -18,12 +18,6 @@ from datetime import datetime
 from pathlib import Path
 
 from .chart import (
-    AXES_BG,
-    BORDER,
-    ERROR_FG,
-    FIG_BG,
-    FG,
-    FG_DIM,
     PALETTE,
     SHADE,
 )
@@ -70,6 +64,51 @@ def _js_json(obj) -> str:
     return json.dumps(obj, ensure_ascii=False).replace("</", "<\\/")
 
 
+#: Color themes for the site: each entry carries the CSS custom
+#: property values for the page (``bg``, ``bg_alt``, ``fg``, ``fg_dim``,
+#: ``accent``, ``border``, ``error``, ``button``, ``button_hover``) and
+#: the canvas axis background (``axes_bg``); the twilight shading
+#: recipes in SHADE are blended over it at runtime.
+THEMES = {
+    "dark": {
+        "bg": "#1e1e2e",
+        "bg_alt": "#313244",
+        "fg": "#cdd6f4",
+        "fg_dim": "#9aa5c4",
+        "accent": "#89b4fa",
+        "border": "#45475a",
+        "error": "#f38ba8",
+        "button": "#45475a",
+        "button_hover": "#585b70",
+        "axes_bg": "#26263a",
+    },
+    "light": {
+        "bg": "#eff1f5",
+        "bg_alt": "#e2e5eb",
+        "fg": "#4c4f69",
+        "fg_dim": "#6c7086",
+        "accent": "#1e66f5",
+        "border": "#bcc0cc",
+        "error": "#d20f39",
+        "button": "#ccd0da",
+        "button_hover": "#bcc0cc",
+        "axes_bg": "#e6e9ef",
+    },
+    "red": {
+        "bg": "#000000",
+        "bg_alt": "#120300",
+        "fg": "#ff5544",
+        "fg_dim": "#a63d28",
+        "accent": "#ff7755",
+        "border": "#4d1a00",
+        "error": "#ffa673",
+        "button": "#2b0e00",
+        "button_hover": "#3f1600",
+        "axes_bg": "#0a0200",
+    },
+}
+
+
 _TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -85,6 +124,8 @@ _TEMPLATE = r"""<!DOCTYPE html>
   --accent: #89b4fa;
   --border: #45475a;
   --error: #f38ba8;
+  --button: #45475a;
+  --button-hover: #585b70;
 }
 * { box-sizing: border-box; }
 body {
@@ -96,6 +137,12 @@ body {
 }
 .wrap { width: 95%; margin: 0 auto; padding: 1.5rem 0 2rem; }
 header h1 { margin: 0 0 0.25rem; font-size: 1.5rem; }
+header .header-row { display: flex; align-items: baseline; gap: 1rem; }
+header .theme-field { margin-left: auto; display: flex; align-items: center;
+                      gap: 0.4rem; font-size: 0.83rem; color: var(--fg-dim); }
+header .theme-field select { flex: none; }
+html[data-theme="red"] body { filter: grayscale(1) sepia(1) hue-rotate(-32deg)
+                              saturate(3.2) brightness(1.08); }
 header p { margin: 0; color: var(--fg-dim); }
 .layout { display: grid; grid-template-columns: 340px 1fr; gap: 1rem; margin-top: 1rem; }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
@@ -125,11 +172,11 @@ input, select {
 input:focus, select:focus { outline: none; border-color: var(--accent); }
 input[type="color"] { padding: 0; width: 30px; height: 26px; flex: none; }
 button {
-  background: #45475a; color: var(--fg); border: 1px solid var(--border);
+  background: var(--button); color: var(--fg); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.28rem 0.7rem; font: inherit; font-size: 0.83rem;
   cursor: pointer;
 }
-button:hover { background: #585b70; }
+button:hover { background: var(--button-hover); }
 .target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px auto 22px;
               gap: 0.3rem; margin: 0.25rem 0; align-items: center; }
 #targets.extra .target-row { grid-template-columns: 30px 1fr 1fr 1fr 44px 1fr auto 22px; }
@@ -229,7 +276,14 @@ footer li { margin-bottom: 0.2rem; }
 <body>
 <div class="wrap">
 <header>
+<div class="header-row">
 <h1>Airmass chart &mdash; <span id="obs-title">__OBS_NAME__</span></h1>
+<label class="theme-field"><span>Theme</span><select id="theme-sel">
+  <option value="dark">Dark</option>
+  <option value="light">Light</option>
+  <option value="red">Red (night)</option>
+</select></label>
+</div>
 <p>Airmass (X) for the targets below, as seen from this observatory.
    Every control is live; your edits are saved in this browser and encoded in
    the page URL, so the address bar is a shareable link.</p>
@@ -2085,6 +2139,25 @@ function skyViewQueryUrl(survey, raDeg, decDeg) {
 }
 
 
+/**
+ * Blend a foreground hex color over a background hex color.
+ *
+ * @param {string} fgHex - Foreground color as '#rrggbb'.
+ * @param {number} alpha - Foreground opacity, 0 (transparent) to 1 (opaque).
+ * @param {string} bgHex - Background color as '#rrggbb'.
+ * @returns {string} Resulting color as '#rrggbb'.
+ */
+function blendHex(fgHex, alpha, bgHex) {
+  var i, c = "#", m, h;
+  for (i = 0; i < 3; i++) {
+    m = Math.round(parseInt(fgHex.slice(1 + 2 * i, 3 + 2 * i), 16) * alpha +
+                   parseInt(bgHex.slice(1 + 2 * i, 3 + 2 * i), 16) * (1.0 - alpha));
+    h = m.toString(16);
+    c += (h.length < 2 ? "0" + h : h);
+  }
+  return c;
+}
+
 /*JS-CORE-END*/
 
 // --------------------------------------------------------------- embedded data
@@ -2098,14 +2171,9 @@ var PALETTE =
 __PALETTE__;
 var SHADE =
 __SHADE__;
-var THEME = {
-  bg: "__FIG_BG__",
-  axes_bg: "__AXES_BG__",
-  fg: "__FG__",
-  fg_dim: "__FG_DIM__",
-  border: "__BORDER__",
-  error: "__ERROR_FG__",
-};
+var THEMES =
+__THEMES__;
+var THEME = null;
 var STATE_KEY = "airmass-gui-site-state";
 var FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
@@ -3443,7 +3511,7 @@ function draw(fast) {
   var shading = sunShading(v0, v1, obs.lat, obs.lon);
   for (var si = 0; si < shading.length; si++) {
     var iv = shading[si];
-    ctx.fillStyle = SHADE[iv[2]];
+    ctx.fillStyle = THEME.shade[iv[2]];
     ctx.fillRect(X(iv[0]), plot.y, X(iv[1]) - X(iv[0]), plot.h);
   }
 
@@ -5708,6 +5776,64 @@ window.addEventListener("resize", function () {
   scheduleRedraw();
 });
 
+/**
+ * Apply a color theme to the page and to the chart canvases.
+ *
+ * Sets the CSS custom properties on <html> from the THEMES entry for
+ * name, rebuilds the canvas THEME from the same entry (blending the
+ * twilight shading recipes over the theme's axis background), and tags
+ * <html> with data-theme so the red night theme can shift every color
+ * on the page into a red family with a CSS filter. The choice is a
+ * viewer preference: it is stored in localStorage under
+ * airmass-gui-theme and never enters the share fragment or the
+ * workspace state.
+ *
+ * @param {string} name - Theme name, a key of THEMES: "dark", "light",
+ *     or "red".
+ * @returns {object} The canvas THEME object built from the theme.
+ */
+function applyTheme(name) {
+  var t = THEMES[name] || THEMES.dark;
+  var root = document.documentElement;
+  root.setAttribute("data-theme", name);
+  var map = {
+    "--bg": t.bg,
+    "--bg-alt": t.bg_alt,
+    "--fg": t.fg,
+    "--fg-dim": t.fg_dim,
+    "--accent": t.accent,
+    "--border": t.border,
+    "--error": t.error,
+    "--button": t.button,
+    "--button-hover": t.button_hover
+  };
+  for (var k in map) root.style.setProperty(k, map[k]);
+  var theme = {
+    bg: t.bg,
+    axes_bg: t.axes_bg,
+    fg: t.fg,
+    fg_dim: t.fg_dim,
+    border: t.border,
+    error: t.error,
+    shade: {}
+  };
+  for (var kind in SHADE)
+    theme.shade[kind] = blendHex(SHADE[kind][0], SHADE[kind][1], t.axes_bg);
+  THEME = theme;
+  return THEME;
+}
+
+var savedTheme = localStorage.getItem("airmass-gui-theme");
+if (!THEMES[savedTheme]) savedTheme = "dark";
+applyTheme(savedTheme);
+$("theme-sel").value = savedTheme;
+$("theme-sel").addEventListener("change", function () {
+  applyTheme(this.value);
+  localStorage.setItem("airmass-gui-theme", this.value);
+  draw();
+  if (state.options.finding) updateFindingChart();
+});
+
 buildPresetSelect();
 refreshWsSelect();
 syncAllControls();
@@ -5722,8 +5848,9 @@ def build_site(data: dict, out_path: str | Path) -> Path:
     """Write the workspace as an interactive single-file HTML page.
 
     The page carries the workspace as its initial state, plus the
-    observatory presets, the palette, and the pre-blended twilight
-    shading colors, and embeds the whole chart engine as JavaScript.
+    observatory presets, the palette, the color themes, and the
+    twilight shading recipes, and embeds the whole chart engine as
+    JavaScript.
 
     Parameters
     ----------
@@ -5738,10 +5865,6 @@ def build_site(data: dict, out_path: str | Path) -> Path:
         Path of the file written.
     """
     obs = from_dict(data.get("observatory", {}))
-    shade = {
-        kind: _blend_hex(color, alpha, AXES_BG)
-        for kind, (color, alpha) in SHADE.items()
-    }
     page = _TEMPLATE
     page = page.replace("__OBS_NAME__", html.escape(str(obs.name)))
     page = page.replace("__GENERATED__", datetime.now().isoformat(timespec="seconds"))
@@ -5749,16 +5872,8 @@ def build_site(data: dict, out_path: str | Path) -> Path:
     page = page.replace("__OBSERVATORIES__", _js_json([to_dict(p) for p in PRESETS.values()]))
     page = page.replace("__PRESET_RENAMES__", _js_json(RENAME_MAP))
     page = page.replace("__PALETTE__", _js_json(PALETTE))
-    page = page.replace("__SHADE__", _js_json(shade))
-    for token, value in (
-        ("__FIG_BG__", FIG_BG),
-        ("__AXES_BG__", AXES_BG),
-        ("__FG__", FG),
-        ("__FG_DIM__", FG_DIM),
-        ("__BORDER__", BORDER),
-        ("__ERROR_FG__", ERROR_FG),
-    ):
-        page = page.replace(token, value)
+    page = page.replace("__SHADE__", _js_json(SHADE))
+    page = page.replace("__THEMES__", _js_json(THEMES))
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")

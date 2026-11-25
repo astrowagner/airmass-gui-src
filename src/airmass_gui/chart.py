@@ -50,8 +50,10 @@ FG_DIM = "#9aa5c4"
 BORDER = "#45475a"
 ERROR_FG = "#f38ba8"
 
-# Twilight shading per solar-altitude class: (color, alpha), blended over the
-# dark axis background: day is a light band, night is darker than the base.
+# Twilight shading per solar-altitude class: (color, alpha). The site
+# blends the color over the active theme's axis background at runtime;
+# the PNG output blends it over the dark theme: day is a light band,
+# night is darker than the base.
 SHADE = {
     "day": ("#e6e3d8", 0.30),
     "civil": ("#ffd966", 0.28),
