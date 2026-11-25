@@ -24,7 +24,7 @@ from astropy.time import Time
 from airmass_gui import astro, chart, lookup
 from airmass_gui.observatories import PRESETS, RENAME_MAP, to_dict
 from airmass_gui.site import THEMES, _blend_hex, build_site
-from airmass_gui.workspace import new_workspace
+from airmass_gui.workspace import load, new_workspace, save
 
 try:
     import dukpy
@@ -530,6 +530,127 @@ class SitePageTests(unittest.TestCase):
             _embedded_json(page, "INITIAL")["objects"][0]["name"],
             data["objects"][0]["name"],
         )
+
+    def test_embedded_initial_uses_preset_table(self):
+        """The embedded workspace's preset row carries the table's numbers.
+
+        The deployed page embeds whatever workspace.load returns, so a
+        saved file with a preset name and stale site numbers must embed
+        the reference table's row, not the file's numbers.
+        """
+        ws = new_workspace()
+        ws["observatory"] = {
+            "name": "Mount Graham (LBT)",
+            "lat": 32.44278,
+            "lon": -111.155,
+            "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+            "preset": "Mount Graham (LBT)",
+        }
+        ws["objects"] = []
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / "workspace.json"
+            save(path, ws)
+            data = load(path)
+            page = build_site(data, Path(scratch) / "index.html").read_text(
+                encoding="utf-8")
+        obs = _embedded_json(page, "INITIAL")["observatory"]
+        self.assertAlmostEqual(obs["lat"], 32.70131, places=5)
+        self.assertAlmostEqual(obs["lon"], -109.88906, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 3221.0, places=4)
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class PresetAuthorityPageTests(unittest.TestCase):
+    """normalizeState on the page: a preset name is authoritative.
+
+    Every load path (loadState, loadWorkspaceDoc, Reset) passes through
+    normalizeState, so it must rename a stale preset and overwrite the
+    saved numbers with the embedded table's row. A state without a
+    preset keeps its saved numbers.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Denver": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        om_body = json.loads(json.dumps({
+            "latitude": 32.44236, "longitude": -111.16411,
+            "timezone": "America/Phoenix", "timezone_abbreviation": "MST",
+            "utc_offset_seconds": -25200, "elevation": 645.0,
+            "generationtime_ms": 0.1, "hourly_units": {},
+            "hourly": {"time": [], "cloud_cover": [],
+                       "precipitation_probability": []},
+        }))
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(om_body)))
+                 .replace("__HORIZONS_BODY__", json.dumps("")))
+        cls.interp = dukpy.JSInterpreter()
+        cls.interp.evaljs(stubs + ";\n0")
+        cls.interp.evaljs(script + ";\n0")
+
+    def _normalize_observatory(self, obs_obj):
+        code = ("var s = { observatory: " + json.dumps(obs_obj) +
+                ", objects: [], "
+                "time_range: { start: '2026-11-25T00:00', days: 1.0 } };"
+                "normalizeState(s);JSON.stringify(s.observatory);")
+        return json.loads(self.interp.evaljs(code))
+
+    def test_normalize_state_preset_authoritative(self):
+        """A saved preset name overwrites the stored site numbers."""
+        obs = self._normalize_observatory({
+            "name": "Mount Graham (LBT)",
+            "lat": 32.44278, "lon": -111.155, "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+            "preset": "Mount Graham (LBT)",
+        })
+        self.assertAlmostEqual(obs["lat"], 32.70131, places=5)
+        self.assertAlmostEqual(obs["lon"], -109.88906, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 3221.0, places=4)
+        self.assertEqual(obs["timezone"], "America/Phoenix")
+
+    def test_normalize_state_renamed_preset_authoritative(self):
+        """loadWorkspaceDoc renames nothing; normalizeState must do it.
+
+        A state saved under the older name loads with the current
+        preset and the table's numbers.
+        """
+        obs = self._normalize_observatory({
+            "name": "LBT (Large Binocular Telescope)",
+            "lat": 32.44278, "lon": -111.155, "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+            "preset": "LBT (Large Binocular Telescope)",
+        })
+        self.assertEqual(obs["preset"], "Mount Graham (LBT)")
+        self.assertEqual(obs["name"], "Mount Graham (LBT)")
+        self.assertAlmostEqual(obs["lat"], 32.70131, places=5)
+        self.assertAlmostEqual(obs["lon"], -109.88906, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 3221.0, places=4)
+
+    def test_normalize_state_no_preset_unchanged(self):
+        """An observatory without a preset keeps its saved numbers."""
+        obs = self._normalize_observatory({
+            "name": "Custom site",
+            "lat": 32.44278, "lon": -111.155, "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+        })
+        self.assertAlmostEqual(obs["lat"], 32.44278, places=5)
+        self.assertAlmostEqual(obs["lon"], -111.155, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 2400.0, places=4)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

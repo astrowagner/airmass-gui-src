@@ -2396,9 +2396,15 @@ function setStatus(msg) { $("status").textContent = msg || ""; }
 function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 
 /**
- * Fill the display options with their defaults.
+ * Fill the display options with their defaults and apply the preset table.
  *
- * Keeps older saved states and imported files working.
+ * Keeps older saved states and imported files working. Every load path
+ * (loadState, loadWorkspaceDoc, Reset) passes through here, so this is
+ * where old preset names are renamed and the preset table is made
+ * authoritative: when the observatory carries a preset name (after the
+ * rename), its name, lat, lon, elevation_m, and timezone are taken from
+ * OBSERVATORIES and the saved numbers are ignored. An observatory with
+ * no preset name keeps its saved values.
  *
  * @param {Object} s - Workspace state; its options object is completed
  *     in place with defaults for every display option. The curve option
@@ -2408,6 +2414,21 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
  * @returns {Object} The same state object.
  */
 function normalizeState(s) {
+  if (s && s.observatory) {
+    var obs = s.observatory;
+    if (PRESET_RENAMES[obs.preset]) obs.preset = PRESET_RENAMES[obs.preset];
+    if (PRESET_RENAMES[obs.name]) obs.name = PRESET_RENAMES[obs.name];
+    for (var i = 0; i < OBSERVATORIES.length; i++) {
+      if (OBSERVATORIES[i].name === obs.preset) {
+        obs.name = OBSERVATORIES[i].name;
+        obs.lat = OBSERVATORIES[i].lat;
+        obs.lon = OBSERVATORIES[i].lon;
+        obs.elevation_m = OBSERVATORIES[i].elevation_m;
+        obs.timezone = OBSERVATORIES[i].timezone;
+        break;
+      }
+    }
+  }
   var opts = {
     threshold: 1.7,
     windows: true,

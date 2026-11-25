@@ -53,6 +53,83 @@ class WorkspaceTest(unittest.TestCase):
         self.assertEqual(data["observatory"]["preset"], "Mount Graham (LBT)")
         self.assertEqual(data["observatory"]["name"], "Mount Graham (LBT)")
 
+    def test_load_preset_is_authoritative(self):
+        """A saved preset name overwrites the stored site numbers.
+
+        The preset table is authoritative: a workspace saved under a
+        preset name with out-of-date numbers (e.g. the pre-audit LBT
+        row at 32.44278, -111.155, 2400 m) loads with the table's
+        coordinates.
+        """
+        ws = new_workspace()
+        ws["observatory"] = {
+            "name": "Mount Graham (LBT)",
+            "lat": 32.44278,
+            "lon": -111.155,
+            "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+            "preset": "Mount Graham (LBT)",
+        }
+        ws["objects"] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace.json"
+            save(path, ws)
+            data = load(path)
+        obs = data["observatory"]
+        self.assertEqual(obs["preset"], "Mount Graham (LBT)")
+        self.assertAlmostEqual(obs["lat"], 32.70131, places=5)
+        self.assertAlmostEqual(obs["lon"], -109.88906, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 3221.0, places=4)
+        self.assertEqual(obs["timezone"], "America/Phoenix")
+
+    def test_load_authoritative_after_rename(self):
+        """The rename happens first, then the preset table applies.
+
+        A state saved under the older name "LBT (Large Binocular
+        Telescope)" loads as "Mount Graham (LBT)" with the table's
+        numbers, not the stored ones.
+        """
+        ws = new_workspace()
+        ws["observatory"] = {
+            "name": "LBT (Large Binocular Telescope)",
+            "lat": 32.44278,
+            "lon": -111.155,
+            "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+            "preset": "LBT (Large Binocular Telescope)",
+        }
+        ws["objects"] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace.json"
+            save(path, ws)
+            data = load(path)
+        obs = data["observatory"]
+        self.assertEqual(obs["preset"], "Mount Graham (LBT)")
+        self.assertEqual(obs["name"], "Mount Graham (LBT)")
+        self.assertAlmostEqual(obs["lat"], 32.70131, places=5)
+        self.assertAlmostEqual(obs["lon"], -109.88906, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 3221.0, places=4)
+
+    def test_load_no_preset_keeps_saved_numbers(self):
+        """An observatory without a preset name is left as saved."""
+        ws = new_workspace()
+        ws["observatory"] = {
+            "name": "Custom site",
+            "lat": 32.44278,
+            "lon": -111.155,
+            "elevation_m": 2400.0,
+            "timezone": "America/Phoenix",
+        }
+        ws["objects"] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workspace.json"
+            save(path, ws)
+            data = load(path)
+        obs = data["observatory"]
+        self.assertAlmostEqual(obs["lat"], 32.44278, places=5)
+        self.assertAlmostEqual(obs["lon"], -111.155, places=5)
+        self.assertAlmostEqual(obs["elevation_m"], 2400.0, places=4)
+
     def test_save_creates_dirs_and_updates_modified(self):
         """save creates parent directories, sets modified, leaves no .tmp."""
         with tempfile.TemporaryDirectory() as tmp:

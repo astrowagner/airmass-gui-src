@@ -1,0 +1,34 @@
+name,lat_deg,lon_deg,elev_m,timezone,source
+Apache Point (APO 3.5m),32.78000,-105.82000,2798,America/Denver,astropy site registry: apo
+Calar Alto,37.22361,-2.54611,2168,Europe/Madrid,astropy site registry: CAHA
+Cerro La Silla (ESO),-29.25667,-70.73000,2347,America/Santiago,astropy site registry: lasilla
+Cerro Pachon (Gemini South),-30.24074,-70.73668,2750,America/Santiago,astropy site registry: gemini_south
+Cerro Paranal (VLT),-24.62744,-70.40499,2669,America/Santiago,astropy site registry: paranal
+Cerro Tololo (NOIRLab),-30.16528,-70.81500,2215,America/Santiago,astropy site registry: ctio
+Chajnantor (ALMA),-23.02900,-67.75500,5000,America/Santiago,astropy site registry: alma
+Effelsberg (100m),50.52484,6.88362,417,Europe/Berlin,astropy site registry: effelsberg
+Green Bank (GBT 100m),38.43306,-79.83972,807,America/New_York,astropy site registry: gbt
+Jodrell Bank (Lovell 76m),53.23650,-2.30840,77,Europe/London,Wikipedia: Lovell Telescope
+Karoo (MeerKAT),-30.71106,21.44389,1087,Africa/Johannesburg,astropy site registry: meerkat
+Kitt Peak (Mayall 4m),31.96333,-111.60000,2120,America/Phoenix,astropy site registry: kpno
+Kitt Peak (NSO),31.96333,-111.60000,2120,America/Phoenix,astropy site registry: kpno
+Las Campanas (Carnegie),-29.00333,-70.70167,2282,America/Santiago,astropy site registry: lco
+Mauna Kea (Gemini North),19.82380,-155.46905,4213,Pacific/Honolulu,astropy site registry: gemini_north
+Mauna Kea (Keck I/II),19.82625,-155.47448,4160,Pacific/Honolulu,astropy site registry: keck
+Mauna Kea (Subaru),19.82550,-155.47602,4163,Pacific/Honolulu,astropy site registry: Subaru
+Mount Graham (LBT),32.70131,-109.88906,3221,America/Phoenix,Wikipedia: Large Binocular Telescope
+Mount Hamilton (Lick),37.34333,-121.63667,1290,America/Los_Angeles,astropy site registry: lick
+Mount Hopkins (MMT 6.5m),31.68833,-110.88500,2608,America/Phoenix,astropy site registry: mmt
+Mount Hopkins (Whipple 1.5m),31.68094,-110.87750,2320,America/Phoenix,astropy site registry: flwo
+Mount Lemmon (Skycenter),32.44200,-110.78930,2791,America/Phoenix,Wikipedia: Mount Lemmon Observatory
+Mount Locke (McDonald),30.67167,-104.02167,2075,America/Chicago,astropy site registry: mcdonald
+Mount Wilson (100-inch),34.22258,-118.06168,1742,America/Los_Angeles,astropy site registry: mwo
+Palomar Mountain (Hale 200-inch),33.35600,-116.86300,1706,America/Los_Angeles,astropy site registry: Palomar
+Pic du Midi (2.0m),42.93639,0.14278,2877,Europe/Paris,Wikipedia: Pic du Midi de Bigorre
+Roque de los Muchachos (IAC),28.75833,-17.88000,2327,Atlantic/Canary,astropy site registry: lapalma
+San Pedro Martir (OAN 2.1m),31.02917,-115.48694,2830,America/Tijuana,astropy site registry: spm
+Siding Spring (AAO),-31.27704,149.06609,1164,Australia/Sydney,astropy site registry: aao
+Sutherland (SALT),-32.37582,20.81081,1798,Africa/Johannesburg,astropy site registry: salt
+Teide (OT),28.30000,-16.50972,2390,Atlantic/Canary,astropy site registry: teide
+VLA (Karl G. Jansky),34.07875,-107.61828,2124,America/Denver,astropy site registry: vla
+Yerkes (40-inch),42.57030,-88.55670,334,America/Chicago,Wikipedia: Yerkes Observatory

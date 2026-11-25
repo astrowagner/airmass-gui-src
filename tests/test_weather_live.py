@@ -4,8 +4,9 @@ Two layers:
 
 * ``TestLiveFixtureContract`` checks the archived live API response
   (``tests/fixtures/open_meteo_live_20261121.json``, captured 2026-11-21
-  from api.open-meteo.com for the LBT) against the contract the site
-  consumes: keys, 240 hourly local times, and percentage ranges.
+  from api.open-meteo.com at 32.44278, -111.155, the pre-audit LBT row,
+  not the observatory) against the contract the site consumes: keys,
+  240 hourly local times, and percentage ranges.
 * ``TestWeatherPipelineLive`` evaluates the built page's full script in
   a real JS engine (dukpy / Duktape) with a validating open-meteo fetch
   stub that returns HTTP 400 plus the API's error reason when the
@@ -31,7 +32,6 @@ try:
 except ImportError:  # pragma: no cover
     dukpy = None
 
-from airmass_gui.observatories import PRESETS
 from airmass_gui.site import build_site
 from airmass_gui.workspace import new_workspace
 
@@ -57,14 +57,18 @@ class TestLiveFixtureContract(unittest.TestCase):
         self.assertFalse(missing, "fixture missing keys: %s" % sorted(missing))
 
     def test_location_is_lbt(self):
-        """The fixture was requested for the LBT in America/Phoenix.
+        """The fixture was requested for 32.44278, -111.155; this is not the LBT.
 
-        open-meteo echoes the model grid point it used rather than the
-        requested coordinates; both agree within a grid cell (~1 km).
+        That point was the pre-audit preset row: the desert floor about
+        33 km northwest of Tucson (the API's 645 m elevation is the
+        valley's, not the observatory's). The fixture is kept as a
+        sample reply; the test checks the position it was requested
+        for, written here, and the model grid point open-meteo echoes
+        back agrees within a grid cell (~1 km).
         """
-        lbt = PRESETS["Mount Graham (LBT)"]
-        self.assertLessEqual(abs(self.body["latitude"] - lbt.lat), 0.01)
-        self.assertLessEqual(abs(self.body["longitude"] - lbt.lon), 0.01)
+        lat, lon = 32.44278, -111.155
+        self.assertLessEqual(abs(self.body["latitude"] - lat), 0.01)
+        self.assertLessEqual(abs(self.body["longitude"] - lon), 0.01)
         self.assertEqual(self.body["timezone"], "America/Phoenix")
         self.assertEqual(self.body["utc_offset_seconds"], -25200)
 
@@ -143,7 +147,7 @@ class TestWeatherPipelineLive(unittest.TestCase):
             cc.append((i * 37) % 101)
             pp.append((i * 53) % 101)
         return {
-            "latitude": 32.44278, "longitude": -111.155,
+            "latitude": 32.70131, "longitude": -109.88906,
             "timezone": "America/Phoenix", "timezone_abbreviation": "MST",
             "utc_offset_seconds": -25200, "elevation": 2400.0,
             "generationtime_ms": 0.123,
@@ -223,8 +227,8 @@ class TestWeatherPipelineLive(unittest.TestCase):
         """Checkbox toggle fetches within the safe horizon and renders the band with its legend entry."""
         info = self._driver_result()
         self.assertEqual(info["fetches"], 1)
-        self.assertIn("latitude=32.44278", info["url"])
-        self.assertIn("longitude=-111.155", info["url"])
+        self.assertIn("latitude=32.70131", info["url"])
+        self.assertIn("longitude=-109.88906", info["url"])
         self.assertIn("timezone=America%2FPhoenix", info["url"])
         self.assertIn("hourly=cloud_cover,precipitation_probability",
                       info["url"])
@@ -554,7 +558,7 @@ async function __main() {
     throw new Error("end_date " + m[2] + " beyond safe horizon");
   if (ymd(m[1]) < num(minStart))
     throw new Error("start_date " + m[1] + " before coverage");
-  if (u.indexOf("latitude=32.44278") === -1 || u.indexOf("longitude=-111.155") === -1)
+  if (u.indexOf("latitude=32.70131") === -1 || u.indexOf("longitude=-109.88906") === -1)
     throw new Error("weather url missing LBT coords: " + u);
   if (u.indexOf("timezone=America%2FPhoenix") === -1)
     throw new Error("weather url missing resolved tz: " + u);

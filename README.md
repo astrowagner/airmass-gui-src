@@ -115,7 +115,7 @@ work with any JSON workspace file.
   (colors in `THEME` in `src/airmass_gui/app.py` and in `src/airmass_gui/chart.py`);
   the navigation toolbar icons lighten automatically on the dark background
   (matplotlib >= 3.9).
-- LBT default: 32 deg 26' 34" N, 111 deg 09' 18" W, 2400 m, America/Phoenix.
+- LBT default: 32 deg 42' 05" N, 109 deg 53' 21" W, 3221 m, America/Phoenix.
 - Tests: `python -m unittest discover -s tests -v`
 
 ## License

@@ -69,7 +69,11 @@ def load(path: Path) -> dict:
     Unknown keys in the file are dropped; known keys keep the file's value.
     A missing or malformed objects entry becomes an empty list. Preset
     display names renamed after they were saved are rewritten to their
-    current form.
+    current form. The preset table is authoritative: when the
+    observatory carries a preset name (after the rename), its name,
+    coordinates, elevation, and time zone are taken from the table and
+    the saved numbers are ignored. An observatory with no preset name
+    is kept as saved.
 
     Parameters
     ----------
@@ -100,6 +104,8 @@ def load(path: Path) -> dict:
         for key in ("preset", "name"):
             if obs.get(key) in RENAME_MAP:
                 obs[key] = RENAME_MAP[obs[key]]
+        if obs.get("preset") in PRESETS:
+            obs.update(to_dict(PRESETS[obs["preset"]]))
     return workspace
 
 
