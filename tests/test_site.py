@@ -370,12 +370,15 @@ class SitePageTests(unittest.TestCase):
             self.assertRegex(color, r"^#[0-9a-f]{6}$")
 
     def test_embedded_themes(self):
-        """THEMES embeds all three color themes as hex-color JSON."""
+        """THEMES embeds all three color themes (hex colors, shade scale)."""
         themes = _embedded_json(self.page, "THEMES")
         self.assertEqual(themes, THEMES)
+        color_keys = ("bg", "bg_alt", "fg", "fg_dim", "accent", "border",
+                      "error", "button", "button_hover", "axes_bg")
         for name, entry in themes.items():
-            for key, value in entry.items():
-                self.assertRegex(value, r"^#[0-9a-f]{6}$", (name, key))
+            for key in color_keys:
+                self.assertRegex(entry[key], r"^#[0-9a-f]{6}$", (name, key))
+            self.assertIsInstance(entry["shade"], float)
 
     def test_theme_selector(self):
         """The header offers the three themes with a change handler."""

@@ -64,7 +64,10 @@ hover tooltip; **Civil** / **Nautical twilight** mark the sun's -6 and -12
 degree crossings as thin vertical lines. The chart is navigable by wheel and
 drag or by touch (one finger pans, two fingers pinch to zoom, tap shows the
 tooltip); keyboard shortcuts: arrow keys pan, `+` / `-` zoom around the
-center, `0` or `r` resets the window.
+center, `0` or `r` resets the window. A **Theme** switch in the header
+offers Dark, Light, and Red (night) — the red mode shifts every color on
+the page into a red family for night vision and dims the twilight bands;
+the choice persists in the browser and never enters the shared link.
 
 The astronomy (sun position, precession, airmass) is computed in embedded
 JavaScript: entered ICRS coordinates are precessed to the mean equator/equinox

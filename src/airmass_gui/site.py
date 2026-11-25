@@ -66,9 +66,10 @@ def _js_json(obj) -> str:
 
 #: Color themes for the site: each entry carries the CSS custom
 #: property values for the page (``bg``, ``bg_alt``, ``fg``, ``fg_dim``,
-#: ``accent``, ``border``, ``error``, ``button``, ``button_hover``) and
-#: the canvas axis background (``axes_bg``); the twilight shading
-#: recipes in SHADE are blended over it at runtime.
+#: ``accent``, ``border``, ``error``, ``button``, ``button_hover``), the
+#: canvas axis background (``axes_bg``), and a twilight-shading opacity
+#: multiplier (``shade``); the SHADE recipes are blended over the axis
+#: background at runtime with their alpha scaled by it.
 THEMES = {
     "dark": {
         "bg": "#1e1e2e",
@@ -81,6 +82,7 @@ THEMES = {
         "button": "#45475a",
         "button_hover": "#585b70",
         "axes_bg": "#26263a",
+        "shade": 1.0,
     },
     "light": {
         "bg": "#eff1f5",
@@ -93,6 +95,7 @@ THEMES = {
         "button": "#ccd0da",
         "button_hover": "#bcc0cc",
         "axes_bg": "#e6e9ef",
+        "shade": 1.0,
     },
     "red": {
         "bg": "#000000",
@@ -105,6 +108,7 @@ THEMES = {
         "button": "#2b0e00",
         "button_hover": "#3f1600",
         "axes_bg": "#0a0200",
+        "shade": 0.5,
     },
 }
 
@@ -5781,7 +5785,8 @@ window.addEventListener("resize", function () {
  *
  * Sets the CSS custom properties on <html> from the THEMES entry for
  * name, rebuilds the canvas THEME from the same entry (blending the
- * twilight shading recipes over the theme's axis background), and tags
+ * twilight shading recipes over the theme's axis background at the
+ * theme's shade opacity), and tags
  * <html> with data-theme so the red night theme can shift every color
  * on the page into a red family with a CSS filter. The choice is a
  * viewer preference: it is stored in localStorage under
@@ -5818,7 +5823,8 @@ function applyTheme(name) {
     shade: {}
   };
   for (var kind in SHADE)
-    theme.shade[kind] = blendHex(SHADE[kind][0], SHADE[kind][1], t.axes_bg);
+    theme.shade[kind] = blendHex(SHADE[kind][0], SHADE[kind][1] * t.shade,
+                                 t.axes_bg);
   THEME = theme;
   return THEME;
 }
