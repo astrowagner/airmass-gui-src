@@ -238,6 +238,83 @@ class TestWeatherPipelineLive(unittest.TestCase):
         for pct in info["pcts"]:
             self.assertTrue(0 <= pct <= 100)
 
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class TestFirstVisitStart(unittest.TestCase):
+    """First visit and Reset center the embedded range on tonight's midnight.
+
+    The clock is pinned at 2026-12-01 03:00 UTC, which is
+    2026-11-30 20:00 in America/Phoenix; the midnight that ends that
+    local day is 2026-12-01 00:00, so the start is that midnight minus
+    half the duration: 2026-11-30 12:00 for 1 day and
+    2026-11-30 00:00 for 2 days. A state from the browser's storage
+    keeps its own start.
+    """
+
+    CLOCK_MS = int(datetime(2026, 12, 1, 3, 0,
+                            tzinfo=timezone.utc).timestamp() * 1000)
+
+    @staticmethod
+    def _page(days):
+        """The page built from site/default_workspace.json with the given days."""
+        data = json.loads(
+            (ROOT / "site" / "default_workspace.json").read_text(encoding="utf-8"))
+        data["time_range"]["days"] = days
+        with tempfile.TemporaryDirectory() as tmp:
+            return build_site(data, Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+
+    def _interp(self, page, stored=None):
+        """Evaluate the page script with the clock pinned and storage optionally pre-seeded."""
+        script = re.findall(r"<script>(.*?)</script>", page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);", script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps({}))))
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(stubs + ";\n0")
+        interp.evaljs("Date.now = function () { return %d; }; 0" % self.CLOCK_MS)
+        if stored is not None:
+            interp.evaljs(
+                'localStorage.setItem("airmass-gui-site-state", '
+                + json.dumps(json.dumps(stored)) + "); 0")
+        interp.evaljs(script + ";\n0")
+        return interp
+
+    def test_first_visit_starts_on_tonight_midnight(self):
+        """A first visit starts at the ending midnight minus half the duration."""
+        for days, want in ((1.0, "2026-11-30 12:00"), (2.0, "2026-11-30 00:00")):
+            interp = self._interp(self._page(days))
+            got = interp.evaljs("state.time_range.start")
+            self.assertEqual(got, want, "days=%r" % days)
+            self.assertEqual(interp.evaljs("state.time_range.days"), days)
+
+    def test_reset_returns_to_tonight_start(self):
+        """Reset discards the stored state and recenters the embedded range."""
+        interp = self._interp(self._page(2.0))
+        interp.evaljs('state.time_range.start = "2025-06-15 00:00"; saveState(); 0')
+        interp.evaljs('$("reset-btn").click(); 0')
+        self.assertEqual(interp.evaljs("state.time_range.start"),
+                         "2026-11-30 00:00")
+        self.assertEqual(interp.evaljs("state.time_range.days"), 2.0)
+
+    def test_stored_state_keeps_its_own_start(self):
+        """A state loaded from the browser's storage is not recentred."""
+        page = self._page(2.0)
+        stored = json.loads(self._interp(page).evaljs("JSON.stringify(state)"))
+        stored["time_range"]["start"] = "2025-06-15 00:00"
+        kept = self._interp(page, stored=stored)
+        self.assertEqual(kept.evaljs("state.time_range.start"),
+                         "2025-06-15 00:00")
+
+
 STUBS = r"""
 // ================= results & timers =================
 var __results = [];

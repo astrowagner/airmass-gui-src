@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "created": "2026-11-20T23:47:57",
+  "modified": "2026-11-21T00:40:17",
+  "observatory": {
+    "name": "Mount Graham (LBT)",
+    "lat": 32.70131,
+    "lon": -109.88906,
+    "elevation_m": 3221.0,
+    "timezone": "America/Phoenix",
+    "preset": "Mount Graham (LBT)"
+  },
+  "objects": [
+    {
+      "name": "Vega",
+      "ra": "18:36:56.30142",
+      "dec": "+38:47:01.4506",
+      "color": "#1f77b4"
+    },
+    {
+      "name": "Procyon",
+      "ra": "07:39:18.12",
+      "dec": "+05:13:29.96",
+      "color": "#ff7f0e"
+    },
+    {
+      "name": "HD 984",
+      "ra": "00:14:10.25",
+      "dec": "-07:11:56.81",
+      "color": "#2ca02c"
+    }
+  ],
+  "time_range": {
+    "start": "2026-11-20T12:00",
+    "days": 2.0
+  }
+}

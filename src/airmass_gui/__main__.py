@@ -1,4 +1,4 @@
-"""Entry point: airmass-gui [--no-gui] [--out FILE] [--site [OUT]]."""
+"""Entry point: airmass-gui [--no-gui] [--out FILE] [--site [OUT]] [--workspace FILE]."""
 from __future__ import annotations
 
 
@@ -14,7 +14,8 @@ def main(argv: list[str] | None = None) -> None:
     Returns
     -------
     None
-        With --site, writes the HTML page to the --site path. With
+        With --site, writes the HTML page to the --site path from the
+        saved workspace, or from --workspace FILE when given. With
         --no-gui, writes a PNG to --out (default: airmass_chart.png next
         to the workspace). Otherwise the tkinter app runs until closed.
     """
@@ -26,6 +27,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--site", nargs="?", const="site/index.html", default=None, metavar="OUT",
                         help="write an interactive single-file HTML page from the saved workspace "
                              "(default: site/index.html)")
+    parser.add_argument("--workspace", default=None, metavar="FILE",
+                        help="workspace JSON to embed with --site "
+                             "(default: the saved workspace)")
     args = parser.parse_args(argv)
 
     if args.site is not None:
@@ -34,10 +38,16 @@ def main(argv: list[str] | None = None) -> None:
         from .site import build_site
         from .workspace import default_path, load, new_workspace, save
 
-        path = default_path()
-        if not path.exists():
-            save(path, new_workspace())
-        data = load(path)
+        if args.workspace is not None:
+            ws = Path(args.workspace)
+            if not ws.is_file():
+                raise SystemExit("airmass-gui: workspace not found: %s" % ws)
+            data = load(ws)
+        else:
+            path = default_path()
+            if not path.exists():
+                save(path, new_workspace())
+            data = load(path)
         out = build_site(data, args.site)
         print(f"Wrote {out} (observatory: {data['observatory'].get('name')})")
         return

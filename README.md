@@ -41,9 +41,15 @@ airmass-gui --no-gui --out chart.png
 ```bash
 airmass-gui --site                  # writes site/index.html
 airmass-gui --site out/page.html    # or anywhere else
+airmass-gui --site --workspace FILE # embed FILE instead of the saved workspace
 ```
 
 Writes a single self-contained HTML page — no other files, no build step.
+The embedded workspace is the saved one by default; the deployed page is
+built with that option from `site/default_workspace.json`. A first visit
+— and **Reset** — centers the embedded range on tonight's local midnight,
+keeping its duration; a setup loaded from a `#w=` link or the browser's
+storage keeps its own start.
 It works fully offline; only the Simbad name lookup needs internet. Open it
 directly in a browser or drop the file into a GitHub Pages repository.
 
