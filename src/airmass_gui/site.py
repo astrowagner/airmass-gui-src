@@ -2406,6 +2406,11 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
  * OBSERVATORIES and the saved numbers are ignored. An observatory with
  * no preset name keeps its saved values.
  *
+ * Target colors are sanitised too: a color that is not a six-digit hex
+ * (a workspace can arrive in a #w= link or an imported file) is
+ * replaced with the palette color for that row, so only a palette hex
+ * ever reaches the chart or the legend.
+ *
  * @param {Object} s - Workspace state; its options object is completed
  *     in place with defaults for every display option. The curve option
  *     is validated against the three modes and falls back to
@@ -2427,6 +2432,13 @@ function normalizeState(s) {
         obs.timezone = OBSERVATORIES[i].timezone;
         break;
       }
+    }
+  }
+  if (Array.isArray(s.objects)) {
+    for (var oi = 0; oi < s.objects.length; oi++) {
+      var o = s.objects[oi];
+      if (!/^#[0-9a-fA-F]{6}$/.test(o.color || ""))
+        o.color = PALETTE[oi % PALETTE.length];
     }
   }
   var opts = {
@@ -3503,9 +3515,13 @@ function renderCalendar() {
 /**
  * Render the curve legend as an HTML row under the chart canvas.
  *
- * The cloud-cover entry's swatch uses a higher alpha than the band
- * itself so it reads at this size. The DOM is rewritten only when the
- * legend entries actually change, so fast redraws are free.
+ * Entries are built with DOM calls (createElement, style.background,
+ * style.opacity, textContent) rather than a string of markup: the
+ * colors and names come from the workspace, and a string-built
+ * style attribute could break out with an embedded quote. The
+ * cloud-cover entry's swatch uses a higher alpha than the band
+ * itself so it reads at this size. The DOM is rewritten only when
+ * the legend entries actually change, so fast redraws are free.
  *
  * @param {Array} legend Legend entries {name, color, alpha}; alpha is
  *     optional and applied to the swatch only.
@@ -3513,25 +3529,29 @@ function renderCalendar() {
  * Outputs:
  *   Sets the contents and visibility of #legend.
  */
-var lastLegendHtml = null;
+var lastLegendKey = null;
 function renderLegend(legend) {
-  var box = $("legend");
-  if (legend.length === 0) {
+  var key = JSON.stringify(legend);
+  if (key !== lastLegendKey) {
+    var box = $("legend");
     box.innerHTML = "";
-    box.style.display = "none";
-    lastLegendHtml = null;
-    return;
+    for (var li = 0; li < legend.length; li++) {
+      var e = legend[li];
+      var item = document.createElement("span");
+      item.className = "lg";
+      var sw = document.createElement("span");
+      sw.className = "sw";
+      sw.style.background = e.color;
+      if (e.alpha != null) sw.style.opacity = e.alpha;
+      item.appendChild(sw);
+      var label = document.createElement("span");
+      label.textContent = e.name;
+      item.appendChild(label);
+      box.appendChild(item);
+    }
+    lastLegendKey = key;
   }
-  var html = "";
-  for (var li = 0; li < legend.length; li++) {
-    var e = legend[li];
-    var sw = "background:" + e.color;
-    if (e.alpha != null) sw += ";opacity:" + e.alpha;
-    html += '<span class="lg"><span class="sw" style="' + sw +
-            '"></span>' + htmlEscape(e.name) + "</span>";
-  }
-  box.style.display = "";
-  if (html !== lastLegendHtml) { box.innerHTML = html; lastLegendHtml = html; }
+  $("legend").style.display = legend.length === 0 ? "none" : "";
 }
 
 /**

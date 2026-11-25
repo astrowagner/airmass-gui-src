@@ -654,6 +654,146 @@ class PresetAuthorityPageTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class SecurityPageTests(unittest.TestCase):
+    """Workspace data reaches the DOM as text, never as markup.
+
+    A workspace can arrive in a #w= link or an imported file, so target
+    colors and names are attacker-controllable: normalizeState must
+    reduce every color to a palette hex, renderLegend must build its
+    swatches with DOM calls instead of string markup, and the summary,
+    calendar and target-details panels must escape target names.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Denver": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        om_body = json.loads(json.dumps({
+            "latitude": 32.70131, "longitude": -109.88906,
+            "timezone": "America/Phoenix", "timezone_abbreviation": "MST",
+            "utc_offset_seconds": -25200, "elevation": 3221.0,
+            "generationtime_ms": 0.1, "hourly_units": {},
+            "hourly": {"time": [], "cloud_cover": [],
+                       "precipitation_probability": []},
+        }))
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(om_body)))
+                 .replace("__HORIZONS_BODY__", json.dumps("")))
+        cls.interp = dukpy.JSInterpreter()
+        cls.interp.evaljs(stubs + ";\n0")
+        cls.interp.evaljs(script + ";\n0")
+
+    def _set_state(self, objects, options=None):
+        """Load a one-observatory state with the given objects."""
+        code = (
+            "state = normalizeState({ observatory: { name: 'Mount Graham (LBT)',"
+            " lat: 32.70131, lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(objects) + ","
+            " options: " + json.dumps(options or {}) + ","
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+        )
+        self.interp.evaljs(code)
+
+    def test_normalize_state_sanitizes_target_colors(self):
+        """A color that is not a six-digit hex becomes the row's palette color.
+
+        The color input accepts any string a link or file can carry
+        (e.g. '#1f77b4" data-x="1'); only a palette hex may reach the
+        chart or the legend.
+        """
+        self._set_state([
+            {"name": "a", "ra": "18:36:56.3", "dec": "38:47:01.5",
+             "color": "#1f77b4\" data-x=\"1"},
+            {"name": "b", "ra": "18:36:56.3", "dec": "38:47:01.5"},
+        ])
+        colors = self.interp.evaljs("JSON.stringify(state.objects.map"
+                                    "(function (o) { return o.color; }))")
+        script = re.findall(r"<script>(.*?)</script>", self.page, re.S)[0]
+        palette = json.loads(
+            re.search(r"var PALETTE =\s*(\[.*?\]);",
+                      re.search(r"<script>(.*?)</script>",
+                                self.page, re.S).group(0),
+                      re.S).group(1))
+        self.assertEqual(json.loads(colors), [palette[0], palette[1]])
+
+    def test_render_legend_builds_dom_not_markup(self):
+        """renderLegend sets the swatch color as a style property.
+
+        A color string with an embedded quote must not break out of
+        the style attribute or add markup; the name must land as
+        text content.
+        """
+        self._set_state([{"name": "a", "ra": "18:36:56.3",
+                          "dec": "38:47:01.5"}])
+        # The probe attribute is hyphen-free because the stub DOM's
+        # attribute parser does not accept hyphenated names.
+        self.interp.evaljs("renderLegend(" + json.dumps([
+            {"name": "A", "color": '#1f77b4" x="1'},
+            {"name": "B", "color": "blue", "alpha": 0.3},
+        ]) + ");")
+        out = self.interp.evaljs("""
+(function () {
+  var box = $("legend");
+  var swatches = [], injected = [], texts = [];
+  var walk = function (el) {
+    var cls = el.className || el["class"] || "";
+    if (cls === "sw") {
+      swatches.push(el.style && el.style.background);
+      if (el.getAttribute("x") !== null) injected.push(cls);
+    }
+    if (el.textContent) texts.push(el.textContent);
+    (el.children || []).forEach(walk);
+  };
+  walk(box);
+  return JSON.stringify({ swatches: swatches, injected: injected, texts: texts });
+})()""")
+        data = json.loads(out)
+        self.assertEqual(data["injected"], [],
+                         "legend markup carries an injected attribute")
+        self.assertEqual(data["swatches"],
+                         ['#1f77b4" x="1', "blue"])
+        self.assertIn("A", data["texts"])
+        self.assertIn("B", data["texts"])
+
+    def test_target_name_escaped_in_panels(self):
+        """A hostile target name stays inert in summary, calendar and details.
+
+        The name is rendered through htmlEscape in all three panels; a
+        raw '<b>' in any panel's markup would start a tag.
+        """
+        self._set_state(
+            [{"name": "<b>x</b>\"'&", "ra": "18:36:56.3",
+              "dec": "38:47:01.5"}],
+            options={"extraInfo": True})
+        for fn, box in (("renderSummary", "summary"),
+                        ("renderCalendar", "calendar"),
+                        ("renderTargetDetails", "target-details")):
+            self.interp.evaljs(fn + "();")
+            html = self.interp.evaljs(
+                "JSON.stringify($(\'%s\').__innerHTML)" % box)
+            self.assertIn("&lt;b&gt;x&lt;/b&gt;", html,
+                          fn + " did not escape the name")
+            self.assertNotIn("<b>x</b>", html,
+                             fn + " contains raw markup in the name")
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class JsCoreNumericTests(unittest.TestCase):
     """Evaluate the page's JS core in Duktape and compare against astropy."""
 

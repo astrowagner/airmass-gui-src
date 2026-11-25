@@ -580,13 +580,27 @@ async function __main() {
   if (inRange < 48) throw new Error("too few in-window hours: " + inRange);
 
   draw();
-  var lg = $("legend").__innerHTML;
-  if (lg.indexOf("Cloud cover (fill height = %)") === -1)
-    throw new Error("legend missing the cloud cover entry: " + lg);
-  if (lg.indexOf('class="sw"') === -1)
-    throw new Error("legend swatch missing: " + lg);
-  if (lg.indexOf("opacity:0.45") === -1)
-    throw new Error("legend swatch missing cloud-cover alpha: " + lg);
+  // renderLegend builds the entries with DOM calls, so inspect the
+  // tree: text content for the entry names, style.background and
+  // style.opacity for the swatches.
+  var lgText = "", sws = [];
+  var walkLg = function (el) {
+    if (el.textContent) lgText += " " + el.textContent;
+    if ((el.className || el["class"] || "") === "sw") {
+      sws.push((el.style && el.style.background
+                ? String(el.style.background) : "") +
+               (el.style && el.style.opacity != null
+                ? ";opacity:" + el.style.opacity : ""));
+    }
+    (el.children || []).forEach(walkLg);
+  };
+  walkLg($("legend"));
+  if (lgText.indexOf("Cloud cover (fill height = %)") === -1)
+    throw new Error("legend missing the cloud cover entry: " + lgText);
+  if (sws.length === 0)
+    throw new Error("legend swatch missing: " + lgText);
+  if (sws.join(" | ").indexOf("opacity:0.45") === -1)
+    throw new Error("legend swatch missing cloud-cover alpha: " + sws.join(" | "));
   var status = String($("status").textContent);
   if (status !== "") throw new Error("weather fetch set status: " + status);
   var sum = $("summary").innerHTML;
