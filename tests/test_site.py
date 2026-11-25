@@ -45,7 +45,7 @@ CORE_FUNCTIONS = [
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
-    "objCoords", "horizonsParse", "fieldRotationDeg",
+    "objCoords", "fieldRotationDeg",
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
     "findingStarSize",
@@ -198,6 +198,13 @@ class SitePageTests(unittest.TestCase):
         chart column grows with the window."""
         self.assertIn(".wrap { width: 95%; margin: 0 auto;", self.page)
         self.assertNotIn("max-width: 1400px", self.page)
+
+    def test_no_horizons_feature_in_page(self):
+        """The page carries no Horizons fetch feature: no button, no API
+        URL, no parser name, in any letter case."""
+        lowered = self.page.lower()
+        self.assertNotIn("horizons", lowered)
+        self.assertNotIn("jpl.nasa.gov", lowered)
 
     def test_tooltip_and_view_navigation(self):
         """Tooltip, crosshair, resize handle, and dblclick wiring are present."""
@@ -597,8 +604,7 @@ class PresetAuthorityPageTests(unittest.TestCase):
                  .replace("__ALL_IDS__", json.dumps(all_ids))
                  .replace("__TZ_TABLE__", json.dumps(tz_table))
                  .replace("__SIMBAD_BODY__", json.dumps(""))
-                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(om_body)))
-                 .replace("__HORIZONS_BODY__", json.dumps("")))
+                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(om_body))))
         cls.interp = dukpy.JSInterpreter()
         cls.interp.evaljs(stubs + ";\n0")
         cls.interp.evaljs(script + ";\n0")
@@ -691,8 +697,7 @@ class SecurityPageTests(unittest.TestCase):
                  .replace("__ALL_IDS__", json.dumps(all_ids))
                  .replace("__TZ_TABLE__", json.dumps(tz_table))
                  .replace("__SIMBAD_BODY__", json.dumps(""))
-                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(om_body)))
-                 .replace("__HORIZONS_BODY__", json.dumps("")))
+                 .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(om_body))))
         cls.interp = dukpy.JSInterpreter()
         cls.interp.evaljs(stubs + ";\n0")
         cls.interp.evaljs(script + ";\n0")
@@ -1710,24 +1715,6 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertAlmostEqual(after["raDeg"], 0.25, delta=0.001)
         before = self._js("objCoords({ephemeris: %s}, -1000)" % ep)
         self.assertAlmostEqual(before["raDeg"], 359.0, delta=1e-9)
-
-    def test_horizons_parse(self):
-        """horizonsParse reads date/radec_j2000 pairs and rejects empty replies."""
-        text = (
-            "header line\n"
-            "       date = 2026-02-02 05:00:00\n"
-            "     radec_j2000 =   134.92242957  22.11225783\n"
-            "       date = 2026-02-02 06:00:00\n"
-            "     radec_j2000 =   134.97242957  22.11235783\n"
-            "ERROR: trailing note\n"
-        )
-        rows = json.loads(self._js("JSON.stringify(horizonsParse(%s))" % json.dumps(text)))
-        self.assertEqual(len(rows), 2)
-        self.assertAlmostEqual(rows[0][1], 134.92242957)
-        self.assertAlmostEqual(rows[1][2], 22.11235783)
-        self.assertEqual(rows[1][0], 1770012000000)
-        with self.assertRaises(Exception):
-            self._js("horizonsParse('ERROR: no rows here')")
 
 
 

@@ -134,7 +134,6 @@ class TestFindingDetailsLive(unittest.TestCase):
             .replace("__SIMBAD_BODY__", json.dumps(cls.fixture))
             # Double encoding: the page JSON.parses the stub text result.
             .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps({})))
-            .replace("__HORIZONS_BODY__", json.dumps(""))
         )
         cls.interp.evaljs(stubs + ";\n0")
         cls.interp.evaljs(cls.script + ";\n0")

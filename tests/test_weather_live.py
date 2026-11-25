@@ -123,7 +123,6 @@ class TestWeatherPipelineLive(unittest.TestCase):
             .replace("__SIMBAD_BODY__", json.dumps(""))
             # Double encoding: the page JSON.parses the stub text result.
             .replace("__OPEN_METEO_BODY__", json.dumps(json.dumps(cls.om_body)))
-            .replace("__HORIZONS_BODY__", json.dumps(""))
         )
         cls.interp.evaljs(stubs + ";\n0")
         cls.interp.evaljs(cls.script + ";\n0")
@@ -474,8 +473,6 @@ fetch = function (url, opts) {
       });
     }
     body = __OPEN_METEO_BODY__;
-  } else if (String(url).indexOf("horizons") !== -1) {
-    body = __HORIZONS_BODY__;
   } else {
     body = __SIMBAD_BODY__;
   }
