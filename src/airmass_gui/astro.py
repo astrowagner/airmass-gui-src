@@ -327,7 +327,7 @@ def parse_dec(text: str) -> float:
     """Parse a declination entry to decimal degrees.
 
     Accepts d:m:s, d m s, or decimal degrees; a negative leading degree
-    part signs the whole entry.
+    part, or a leading '-', signs the whole entry.
 
     Parameters
     ----------
@@ -357,7 +357,7 @@ def parse_dec(text: str) -> float:
         deg, minutes, seconds = vals
         if abs(minutes) >= 60 or abs(seconds) >= 60:
             raise ValueError(f"unparseable Dec: {text!r}")
-        sign = -1.0 if deg < 0 else 1.0
+        sign = -1.0 if s.startswith("-") else 1.0
         return sign * (abs(deg) + minutes / 60.0 + seconds / 3600.0)
     value = float(s)
     if abs(value) > 90.0:

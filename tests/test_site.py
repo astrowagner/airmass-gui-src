@@ -663,6 +663,7 @@ class JsCoreNumericTests(unittest.TestCase):
         cls.page = build_site(new_workspace(), Path(cls.dir.name) / "index.html").read_text(encoding="utf-8")
         cls.js = dukpy.JSInterpreter()
         cls.js.evaljs(_extract_core(cls.page))
+        cls.js.evaljs(_extract_fn(cls.page, "sexagesimalString"))
 
     @classmethod
     def tearDownClass(cls):
@@ -1048,6 +1049,41 @@ class JsCoreNumericTests(unittest.TestCase):
                 astro.parse_dec(text)
             with self.assertRaises(Exception):
                 self._js(f"parseDec({json.dumps(text)})")
+
+    def test_parse_dec_negative_zero(self):
+        """parseDec takes the sign from the leading '-', not from -0.
+
+        Sexagesimal decs between 0 and -1 deg carry a degree part of
+        -0; a "deg < 0" sign check reads that as positive. Simbad
+        prints delta Ori as -00 17 56.74.
+        """
+        cases = [
+            ("-00:17:57", -(17 / 60 + 57 / 3600)),
+            ("-00:30:00", -0.5),
+            ("-0:00:48", -48 / 3600),
+            ("-00d30m00s", -0.5),
+            ("+00:30:00", 0.5),
+            ("-01:00:00", -1.0),
+            ("-0.5", -0.5),
+        ]
+        for entry, expected in cases:
+            self.assertAlmostEqual(
+                self._js("parseDec(%s)" % json.dumps(entry)), expected, delta=1e-9)
+
+    def test_parse_dec_simbad_round_trip(self):
+        """Simbad-formatted decs (sign + sexagesimalString) parse back.
+
+        A lookup fills the dec field as sign plus sexagesimalString of
+        the record's dec; parseDec must return the same value to 1e-5
+        deg, including decs between 0 and -1 deg.
+        """
+        for dec in (-0.2990944, -0.5, -0.0125, -1.0):
+            formatted = self._js(
+                "(function (d) { return (d < 0 ? '-' : '+') + "
+                "sexagesimalString(Math.abs(d), 2); })("
+                + repr(dec) + ")")
+            got = self._js("parseDec(%s)" % json.dumps(formatted))
+            self.assertAlmostEqual(got, dec, delta=1e-5)
 
     def test_simbad_parse(self):
         """simbadParseRecord agrees with lookup._parse_ascii_record on a real record."""

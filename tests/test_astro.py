@@ -157,6 +157,31 @@ class ParseTest(unittest.TestCase):
         """Decimal degrees pass through unchanged."""
         self.assertAlmostEqual(parse_dec("38.78374"), 38.78374, places=9)
 
+    def test_dec_negative_zero_degree(self):
+        """The sign of a sexagesimal dec comes from the text, not the number.
+
+        Entries between 0 and -1 deg have a degree part of -0, which
+        "deg < 0" reads as positive; the leading "-" must sign the
+        entry (Simbad prints delta Ori as -00 17 56.74).
+        """
+        self.assertAlmostEqual(parse_dec("-00:17:57"), -(17 / 60 + 57 / 3600), places=9)
+        self.assertAlmostEqual(parse_dec("-00:30:00"), -0.5, places=9)
+        self.assertAlmostEqual(parse_dec("-0:00:48"), -48 / 3600, places=9)
+        self.assertAlmostEqual(parse_dec("-00d30m00s"), -0.5, places=9)
+        self.assertAlmostEqual(parse_dec("+00:30:00"), 0.5, places=9)
+        self.assertAlmostEqual(parse_dec("-01:00:00"), -1.0, places=9)
+        self.assertAlmostEqual(parse_dec("-0.5"), -0.5, places=9)
+
+    def test_dec_round_trip(self):
+        """format_dec_dms then parse_dec round-trips small negative decs.
+
+        A Simbad lookup formats the record's dec with format_dec_dms
+        into the target field, which parse_dec reads back on add; decs
+        between 0 and -1 deg must keep their sign.
+        """
+        for dec in (-0.2990944, -0.5, -0.0125, -1.0):
+            self.assertAlmostEqual(parse_dec(format_dec_dms(dec)), dec, places=5)
+
     def test_invalid(self):
         """Garbage RA/Dec raises ValueError."""
         with self.assertRaises(ValueError):

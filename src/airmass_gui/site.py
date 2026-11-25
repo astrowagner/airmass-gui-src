@@ -1576,7 +1576,7 @@ function parseRa(text) {
  * Parse a declination entry to decimal degrees.
  *
  * Accepts d:m:s, d m s, or decimal degrees; a negative leading degree
- * part signs the whole entry.
+ * part, or a leading '-', signs the whole entry.
  *
  * @param {string} text - Dec entry.
  * @returns {number} Declination in degrees, [-90, 90].
@@ -1594,7 +1594,7 @@ function parseDec(text) {
     if (Math.abs(vals[1]) >= 60 || Math.abs(vals[2]) >= 60) {
       throw new Error("unparseable Dec: " + text);
     }
-    var sign = vals[0] < 0 ? -1 : 1;
+    var sign = s.charAt(0) === "-" ? -1 : 1;
     return sign * (Math.abs(vals[0]) + vals[1] / 60 + vals[2] / 3600);
   }
   var value = Number(s);
