@@ -1129,16 +1129,17 @@ class SummaryMoonMidnightTests(unittest.TestCase):
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class CenterNowTests(unittest.TestCase):
-    """The Center button moves the time window to the current time.
+    """The Center button expands the time range so the current time is its middle.
 
     The clock is pinned. The range is 2026-11-25 00:00 to
     2026-11-27 00:00 America/Phoenix, i.e. 2026-11-25T07:00Z to
-    2026-11-27T07:00Z. Clicking the chart's Center button moves
-    the window so the current time sits at its center, keeping the
-    span when it fits, narrowing it to the largest span that still
-    keeps the current time at the window's center when it is close
-    to a range edge, and pinning to the nearest edge when the
-    current time is outside the range.
+    2026-11-27T07:00Z. Clicking the chart's Center button expands
+    the range symmetrically about the current time: the longer of
+    the before-now and after-now portions is mirrored onto the
+    shorter side, so the current time sits at the exact middle of
+    the range. When the current time is outside the range the
+    range expands until it is contained and mirrored the same way.
+    The zoomed view is discarded and the range is saved.
     """
 
     RANGE_START = int(datetime(2026, 11, 25, 7, 0,
@@ -1179,11 +1180,13 @@ class CenterNowTests(unittest.TestCase):
         interp.evaljs(self.script + ";" + chr(10) + "0")
         return interp
 
-    def _centered_window(self, interp, now, initial):
-        """Click Center from the given initial window and return the result.
+    def _after_center(self, interp, now):
+        """Click Center on the pinned range and read back the result.
 
-        initial is the {t0, t1} window in epoch ms, or None when the
-        full range is shown.
+        now is the pinned clock in epoch ms. Returns a dict with the
+        range start string, the duration in days, the range's
+        middle in epoch ms, and the view window (None when the full
+        range is shown).
         """
         interp.evaljs(
             "state = normalizeState({ observatory: {"
@@ -1195,56 +1198,61 @@ class CenterNowTests(unittest.TestCase):
             " \"dec\": \"+38:47:01.5\"}],"
             " options: { windows: true, threshold: 2.0 },"
             " time_range: { start: '2026-11-25T00:00', days: 2.0 } });"
-            "view = %s; $('center-now').click(); 0"
-            % ("{ t0: %d, t1: %d }" % initial
-               if initial is not None else "null"))
-        return json.loads(interp.evaljs("JSON.stringify(view)"))
+            "$('center-now').click(); 0")
+        return json.loads(interp.evaljs(
+            "JSON.stringify({ start: state.time_range.start,"
+            " days: state.time_range.days,"
+            " center_ms: startUtcMs() + state.time_range.days * 43200000,"
+            " view: view })"))
 
-    def test_center_moves_window_to_now(self):
-        """The window lands centered on the current time, span unchanged."""
+    def test_center_mirrors_after_side_when_it_is_larger(self):
+        """Now inside the range with a longer after side: the range extends before."""
         now = int(datetime(2026, 11, 25, 19, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        window = (self.RANGE_START, self.RANGE_START + 12 * self.HOUR)
-        got = self._centered_window(self._interp(now), now, window)
-        want = {"t0": now - 6 * self.HOUR, "t1": now + 6 * self.HOUR}
-        self.assertEqual(got, want)
+        got = self._after_center(self._interp(now), now)
+        self.assertEqual(got["start"], "2026-11-24 00:00")
+        self.assertEqual(got["days"], 3.0)
+        self.assertIsNone(got["view"])
+        self.assertAlmostEqual(got["center_ms"], now, delta=5000)
 
-    def test_center_narrows_window_near_range_edge(self):
-        """Near a range edge the span narrows so the current time still centers."""
-        now = int(datetime(2026, 11, 27, 6, 0,
+    def test_center_mirrors_before_side_when_it_is_larger(self):
+        """Now inside the range with a longer before side: the range extends after."""
+        now = int(datetime(2026, 11, 26, 19, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        window = (self.RANGE_START, self.RANGE_START + 12 * self.HOUR)
-        got = self._centered_window(self._interp(now), now, window)
-        want = {"t0": now - self.HOUR, "t1": now + self.HOUR}
-        self.assertEqual(got, want)
+        got = self._after_center(self._interp(now), now)
+        self.assertEqual(got["start"], "2026-11-25 00:00")
+        self.assertEqual(got["days"], 3.0)
+        self.assertIsNone(got["view"])
+        self.assertAlmostEqual(got["center_ms"], now, delta=5000)
 
-    def test_center_narrows_full_range_around_now(self):
-        """A full-range view narrows to the largest window centered on now."""
-        now = int(datetime(2026, 11, 25, 19, 0,
+    def test_center_expands_when_now_is_before_range(self):
+        """Now before the range: the range grows back until it is centered."""
+        now = int(datetime(2026, 11, 24, 12, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        got = self._centered_window(self._interp(now), now, None)
-        want = {"t0": now - 12 * self.HOUR, "t1": now + 12 * self.HOUR}
-        self.assertEqual(got, want)
+        got = self._after_center(self._interp(now), now)
+        self.assertEqual(got["start"], "2026-11-21 10:00")
+        self.assertAlmostEqual(got["days"], 134 / 24, delta=1e-4)
+        self.assertIsNone(got["view"])
+        self.assertAlmostEqual(got["center_ms"], now, delta=5000)
 
-    def test_center_leaves_full_range_when_now_is_mid_range(self):
-        """A full-range view is left alone when the current time is its middle."""
+    def test_center_expands_when_now_is_after_range(self):
+        """Now after the range: the range grows forward until it is centered."""
+        now = int(datetime(2026, 11, 27, 18, 0,
+                           tzinfo=timezone.utc).timestamp() * 1000)
+        got = self._after_center(self._interp(now), now)
+        self.assertEqual(got["start"], "2026-11-25 00:00")
+        self.assertAlmostEqual(got["days"], 118 / 24, delta=1e-4)
+        self.assertIsNone(got["view"])
+        self.assertAlmostEqual(got["center_ms"], now, delta=5000)
+
+    def test_center_leaves_range_unchanged_when_now_is_mid_range(self):
+        """Now at the range's middle: nothing changes."""
         now = int(datetime(2026, 11, 26, 7, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        self.assertIsNone(self._centered_window(self._interp(now), now,
-                                                None))
-
-    def test_center_pins_to_nearest_edge_when_now_is_outside(self):
-        """When the current time is outside the range, the window pins to the edge."""
-        before = int(datetime(2026, 11, 24, 12, 0,
-                              tzinfo=timezone.utc).timestamp() * 1000)
-        window = (self.RANGE_START, self.RANGE_START + 12 * self.HOUR)
-        got = self._centered_window(self._interp(before), before, window)
-        self.assertEqual(got, {"t0": window[0], "t1": window[1]})
-        after = int(datetime(2026, 11, 27, 18, 0,
-                             tzinfo=timezone.utc).timestamp() * 1000)
-        got = self._centered_window(self._interp(after), after, window)
-        self.assertEqual(got, {"t0": self.RANGE_END - 12 * self.HOUR,
-                               "t1": self.RANGE_END})
+        got = self._after_center(self._interp(now), now)
+        self.assertEqual(got["start"], "2026-11-25 00:00")
+        self.assertEqual(got["days"], 2.0)
+        self.assertIsNone(got["view"])
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
