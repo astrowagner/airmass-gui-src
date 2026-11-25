@@ -939,6 +939,91 @@ class MoonTopocentricTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class TransitTimesRaOfDateTests(unittest.TestCase):
+    """Transit times use the RA of date, not J2000.
+
+    The sidereal time is in the equinox of date, so transitTimes
+    must be given the RA precessed to TETE. Fed the J2000 RA, the
+    first transits of 2026-11-25 at the LBT come out early by
+    52 s (Vega), 73 s (Sirius), 89 s (M31) and 186 s (Dec +80).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.TemporaryDirectory()
+        cls.page = build_site(new_workspace(),
+                              Path(cls.dir.name) / "index.html").read_text(
+            encoding="utf-8")
+        cls.js = dukpy.JSInterpreter()
+        cls.js.evaljs(_extract_core(cls.page))
+        cls.loc = EarthLocation.from_geodetic(
+            LBT.lon * u.deg, LBT.lat * u.deg, LBT.elevation_m)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.dir.cleanup()
+
+    def _astropy_first_transit(self, ra_deg, dec_deg, start, span_s):
+        """First instant after start at which the apparent hour angle
+        is zero, from astropy (apparent sidereal time minus the TETE
+        RA), by a 60 s scan and bisection.
+        """
+        coord = SkyCoord(ra_deg * u.deg, dec_deg * u.deg, frame="icrs")
+        prev = None
+        for i in range(int(span_s / 60.0)):
+            t = start + i * 60 * u.s
+            st_deg = t.sidereal_time(
+                "apparent", self.loc.lon.deg * u.deg).to_value("deg") % 360
+            d = (st_deg - coord.transform_to(TETE(obstime=t)).ra.deg) % 360
+            if prev is not None and prev > 180.0 and d <= 180.0:
+                lo = t - 60 * u.s
+                hi = t
+                for _ in range(40):
+                    mid = lo + 0.5 * (hi - lo)
+                    st_m = mid.sidereal_time(
+                        "apparent", self.loc.lon.deg * u.deg).to_value(
+                        "deg") % 360
+                    dm = (st_m - coord.transform_to(TETE(obstime=mid)).ra.deg) % 360
+                    if dm > 180.0:
+                        lo = mid
+                    else:
+                        hi = mid
+                return lo + 0.5 * (hi - lo)
+            prev = d
+        self.fail("no apparent transit within the span")
+
+    def test_first_transit_matches_astropy(self):
+        """First transit after 2026-11-25 00:00 UTC, within 10 s.
+
+        The RA of date comes from precessIcrsToTete at the start of
+        the scan, the way both callers now pass it.
+        """
+        start = Time("2026-11-25 00:00:00")
+        start_ms = int((start - Time("1970-01-01 00:00:00")).sec * 1000)
+        end_ms = start_ms + 48 * 3600 * 1000
+        for ra, dec in ((279.2347, 38.7837), (101.2872, -16.7161),
+                        (10.6847, 41.2687), (150.0, 80.0)):
+            got_ms = self.js.evaljs(
+                "JSON.stringify(transitTimes(precessIcrsToTete(%r, %r, "
+                "jdFromUtcMs(%r)).raDeg / 15, %r, %r, %r))"
+                % (ra, dec, start_ms, start_ms, end_ms, LBT.lon))
+            got = json.loads(got_ms)[0]
+            want = self._astropy_first_transit(ra, dec, start, 48 * 3600)
+            diff_s = abs((Time(got / 1000, format="unix") - want).sec)
+            self.assertLess(diff_s, 10.0,
+                            "transit for (%s, %s) off by %.1f s" % (ra, dec, diff_s))
+
+    def test_callers_precess_before_transit_times(self):
+        """Both callers pass the RA of date, precessed at the scan start."""
+        self.assertIn(
+            "precessIcrsToTete(mid.raDeg, mid.dec, jdFromUtcMs(day[0])).raDeg / 15",
+            self.page)
+        self.assertIn(
+            "precessIcrsToTete(mid.raDeg, mid.dec, jdFromUtcMs(v0)).raDeg / 15",
+            self.page)
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class JsCoreNumericTests(unittest.TestCase):
     """Evaluate the page's JS core in Duktape and compare against astropy."""
 

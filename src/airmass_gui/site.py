@@ -1000,12 +1000,15 @@ function trueRuns(ok, startMs, stepMs) {
 }
 
 /**
- * Transit times: instants when the local sidereal time passes the target's RA.
+ * Transit times: instants when the local sidereal time passes the target's RA of date.
  *
- * The wrapped LST-RA difference crossing 180 deg downward; 10-min scan
- * with bisection refinement.
+ * The sidereal time is in the equinox of date, so raH must be the
+ * precessed (TETE) right ascension, not J2000: with the J2000 RA the
+ * transits of 2026-11 come out early by 52 s (Vega) to 186 s (Dec
+ * +80) at the LBT. The wrapped LST-RA difference crossing 180 deg
+ * downward; 10-min scan with bisection refinement.
  *
- * @param {number} raH - Target right ascension in hours.
+ * @param {number} raH - Target right ascension of date in hours.
  * @param {number} startMs - Scan start, epoch ms.
  * @param {number} endMs - Scan end, epoch ms.
  * @param {number} lonDeg - Observer longitude in degrees, positive east.
@@ -3250,7 +3253,8 @@ function summaryData() {
         if (altAt[ki] > maxAlt) maxAlt = altAt[ki];
       }
       var transits = [];
-      var midRa = objCoords(obj, 0.5 * (day[0] + day[1])).raDeg / 15;
+      var mid = objCoords(obj, 0.5 * (day[0] + day[1]));
+      var midRa = precessIcrsToTete(mid.raDeg, mid.dec, jdFromUtcMs(day[0])).raDeg / 15;
       transitTimes(midRa, day[0], day[1], obs.lon).forEach(function (tm) {
         var jd = jdFromUtcMs(tm);
         var tc = objCoords(obj, tm);
@@ -3959,7 +3963,8 @@ function draw(fast) {
     ctx.restore();
     // transit ticks on the time axis, colored per target
     targets.forEach(function (tg) {
-      var trs = transitTimes(objCoords(tg.obj, 0.5 * (v0 + v1)).raDeg / 15, v0, v1, obs.lon);
+      var mid = objCoords(tg.obj, 0.5 * (v0 + v1));
+      var trs = transitTimes(precessIcrsToTete(mid.raDeg, mid.dec, jdFromUtcMs(v0)).raDeg / 15, v0, v1, obs.lon);
       ctx.fillStyle = tg.color;
       for (var tti = 0; tti < trs.length; tti++) {
         ctx.fillRect(X(trs[tti]) - 1.5, plot.y + plot.h - 8, 3, 8);
