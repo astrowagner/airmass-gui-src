@@ -1133,11 +1133,12 @@ class CenterNowTests(unittest.TestCase):
 
     The clock is pinned. The range is 2026-11-25 00:00 to
     2026-11-27 00:00 America/Phoenix, i.e. 2026-11-25T07:00Z to
-    2026-11-27T07:00Z. Clicking the chart's Center button keeps
-    the window's span and moves it so the current time sits at the
-    window's center. A centered window that would run past the
-    range is slid back into the range, and a view that already
-    shows the full range is left unchanged.
+    2026-11-27T07:00Z. Clicking the chart's Center button moves
+    the window so the current time sits at its center, keeping the
+    span when it fits, narrowing it to the largest span that still
+    keeps the current time at the window's center when it is close
+    to a range edge, and pinning to the nearest edge when the
+    current time is outside the range.
     """
 
     RANGE_START = int(datetime(2026, 11, 25, 7, 0,
@@ -1178,12 +1179,11 @@ class CenterNowTests(unittest.TestCase):
         interp.evaljs(self.script + ";" + chr(10) + "0")
         return interp
 
-    def _centered_window(self, interp, now):
-        """Set the two-day range, park a 12 h window at its start, click Center.
+    def _centered_window(self, interp, now, initial):
+        """Click Center from the given initial window and return the result.
 
-        @param {dukpy.JSInterpreter} interp - Pinned-clock page interpreter.
-        @param {int} now - Pinned clock, epoch ms; the current time.
-        @returns {dict} The view window {t0, t1} after the click, or None.
+        initial is the {t0, t1} window in epoch ms, or None when the
+        full range is shown.
         """
         interp.evaljs(
             "state = normalizeState({ observatory: {"
@@ -1195,44 +1195,56 @@ class CenterNowTests(unittest.TestCase):
             " \"dec\": \"+38:47:01.5\"}],"
             " options: { windows: true, threshold: 2.0 },"
             " time_range: { start: '2026-11-25T00:00', days: 2.0 } });"
-            "view = { t0: %d, t1: %d };"
-            "$('center-now').click(); 0"
-            % (self.RANGE_START, self.RANGE_START + 12 * self.HOUR))
+            "view = %s; $('center-now').click(); 0"
+            % ("{ t0: %d, t1: %d }" % initial
+               if initial is not None else "null"))
         return json.loads(interp.evaljs("JSON.stringify(view)"))
 
     def test_center_moves_window_to_now(self):
         """The window lands centered on the current time, span unchanged."""
         now = int(datetime(2026, 11, 25, 19, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        got = self._centered_window(self._interp(now), now)
+        window = (self.RANGE_START, self.RANGE_START + 12 * self.HOUR)
+        got = self._centered_window(self._interp(now), now, window)
         want = {"t0": now - 6 * self.HOUR, "t1": now + 6 * self.HOUR}
         self.assertEqual(got, want)
 
-    def test_center_slides_window_back_into_range(self):
-        """A centered window that would run past the range edge is slid in."""
+    def test_center_narrows_window_near_range_edge(self):
+        """Near a range edge the span narrows so the current time still centers."""
         now = int(datetime(2026, 11, 27, 6, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        got = self._centered_window(self._interp(now), now)
-        want = {"t0": now - 11 * self.HOUR, "t1": self.RANGE_END}
+        window = (self.RANGE_START, self.RANGE_START + 12 * self.HOUR)
+        got = self._centered_window(self._interp(now), now, window)
+        want = {"t0": now - self.HOUR, "t1": now + self.HOUR}
         self.assertEqual(got, want)
 
-    def test_center_leaves_full_range_unchanged(self):
-        """A view that already shows the full range is left alone."""
+    def test_center_narrows_full_range_around_now(self):
+        """A full-range view narrows to the largest window centered on now."""
         now = int(datetime(2026, 11, 25, 19, 0,
                            tzinfo=timezone.utc).timestamp() * 1000)
-        interp = self._interp(now)
-        interp.evaljs(
-            "state = normalizeState({ observatory: {"
-            " name: 'Mount Graham (LBT)', lat: 32.70131,"
-            " lon: -109.88906, elevation_m: 3221.0,"
-            " timezone: 'America/Phoenix',"
-            " preset: 'Mount Graham (LBT)' },"
-            " objects: [{\"name\": \"t\", \"ra\": \"18:36:56.3\","
-            " \"dec\": \"+38:47:01.5\"}],"
-            " options: { windows: true, threshold: 2.0 },"
-            " time_range: { start: '2026-11-25T00:00', days: 2.0 } });"
-            "$('center-now').click(); 0")
-        self.assertIsNone(json.loads(interp.evaljs("JSON.stringify(view)")))
+        got = self._centered_window(self._interp(now), now, None)
+        want = {"t0": now - 12 * self.HOUR, "t1": now + 12 * self.HOUR}
+        self.assertEqual(got, want)
+
+    def test_center_leaves_full_range_when_now_is_mid_range(self):
+        """A full-range view is left alone when the current time is its middle."""
+        now = int(datetime(2026, 11, 26, 7, 0,
+                           tzinfo=timezone.utc).timestamp() * 1000)
+        self.assertIsNone(self._centered_window(self._interp(now), now,
+                                                None))
+
+    def test_center_pins_to_nearest_edge_when_now_is_outside(self):
+        """When the current time is outside the range, the window pins to the edge."""
+        before = int(datetime(2026, 11, 24, 12, 0,
+                              tzinfo=timezone.utc).timestamp() * 1000)
+        window = (self.RANGE_START, self.RANGE_START + 12 * self.HOUR)
+        got = self._centered_window(self._interp(before), before, window)
+        self.assertEqual(got, {"t0": window[0], "t1": window[1]})
+        after = int(datetime(2026, 11, 27, 18, 0,
+                             tzinfo=timezone.utc).timestamp() * 1000)
+        got = self._centered_window(self._interp(after), after, window)
+        self.assertEqual(got, {"t0": self.RANGE_END - 12 * self.HOUR,
+                               "t1": self.RANGE_END})
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

@@ -84,8 +84,9 @@ degree crossings as thin vertical lines. The chart is navigable by wheel and
 drag or by touch (one finger pans, two fingers pinch to zoom, tap shows the
 tooltip); keyboard shortcuts: arrow keys pan, `+` / `-` zoom around the
 center, `0` or `r` resets the window, and the ◎ button in the chart's
-control row keeps the window's span and moves it so the current time,
-the red now marker, sits at its center. A **Theme** switch in the header
+control row moves the window so the current time, the red now
+marker, sits at its center, narrowing the window when it would
+otherwise run past a range edge. A **Theme** switch in the header
 offers Dark, Light, and Red (night) — the red mode shifts every color on
 the page into a red family for night vision and dims the twilight bands;
 the choice persists in the browser and never enters the shared link.
