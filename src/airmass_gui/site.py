@@ -325,7 +325,6 @@ footer li { margin-bottom: 0.2rem; }
     <label class="field"><span>Dawn/dusk ticks</span><input id="dusk-chk" type="checkbox" checked></label>
     <label class="field"><span>Weather</span><input id="weather-chk" type="checkbox"></label>
     <label class="field"><span>Annual calendar</span><input id="calendar-chk" type="checkbox" checked></label>
-    <label class="field"><span>S/N estimate</span><input id="snr-chk" type="checkbox"></label>
     <label class="field"><span>Finding chart</span><input id="finding-chk" type="checkbox"></label>
   </div>
   <div class="panel" id="panel-targets">
@@ -339,18 +338,6 @@ footer li { margin-bottom: 0.2rem; }
       <button id="simbad-btn" title="Look up this name in CDS Simbad">Simbad</button>
       <button id="add-btn">Add</button>
     </div>
-  </div>
-  <div class="panel" id="snr-panel">
-    <h2>S/N estimate</h2>
-    <label class="field"><span>Aperture (m)</span><input id="snr-ap" type="number" step="0.01" min="0.01"></label>
-    <label class="field"><span>FWHM (arcsec)</span><input id="snr-fwhm" type="number" step="0.1" min="0.01"></label>
-    <label class="field"><span>Pix scale (arcsec/pix)</span><input id="snr-pix" type="number" step="0.01" min="0.01"></label>
-    <label class="field"><span>Read noise (e-)</span><input id="snr-rn" type="number" step="0.1" min="0"></label>
-    <label class="field"><span>Dark (e-/pix/s)</span><input id="snr-dark" type="number" step="0.001" min="0"></label>
-    <label class="field"><span>Efficiency (%)</span><input id="snr-eff" type="number" step="1" min="0" max="100"></label>
-    <label class="field"><span>Extinction (mag/X)</span><input id="snr-k" type="number" step="0.01" min="0"></label>
-    <label class="field"><span>Target S/N</span><input id="snr-target" type="number" step="1" min="1"></label>
-    <label class="field"><span>Fixed exposure (s)</span><input id="snr-fixed" type="number" step="1" min="0" title="0 = solve for the exposure time; otherwise report the S/N reached by this exposure"></label>
   </div>
   <div class="panel" id="panel-workspace">
     <h2>Workspace</h2>
@@ -445,8 +432,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Now: when the current time falls in the displayed window, a red vertical line with a filled circle at the top of the chart marks it.</li>
 <li>Windows: the dashed line marks your airmass threshold; shaded bands show when each target is usable, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold.</li>
 <li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
-<li>Targets: with Extra info checked, each target row also shows its Simbad record (V magnitude, spectral type, parallax) and, when fetched, its Horizons ephemeris point count; click the row's info text to clear it. The V magnitude is what the S/N estimate uses.</li>
-<li>S/N (panel hidden by default; enable it with the S/N estimate checkbox in the Options panel): with the panel on, each per-night window also lists, at the window midpoint, the single exposure that reaches the target S/N (or the S/N of the fixed exposure), from a V-band model: an 8.75&#215;10&#179; e&#8315;&sup1; cm&#8315;&sup2; s&#8315;&sup1; zero point, 21.9 mag arcsec&#8315;&sup2; of dark sky, a Moon term scaled by phase and altitude (Houdashelt et al. 2005), and 0.10 mag per airmass of extinction. The V magnitude is the target&rsquo;s (Simbad lookup or the V mag column); the defaults are editable in the S/N panel.</li>
+<li>Targets: with Extra info checked, each target row also shows its Simbad record (V magnitude, spectral type, parallax) and, when fetched, its Horizons ephemeris point count; click the row's info text to clear it.</li>
 <li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart is drawn in J2000 while the image is centered on the target&rsquo;s equinox-of-date position, so the two agree to about a quarter of a degree; hovering the star chart shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name, angular offset from the cursor, and a detail table (RA/Dec, U B V R I magnitudes, spectral type, object type, offset from the target, and bibliography/note counts); the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 5&deg;, with the current radius shown beside it, and the chart re-scales live as the slider moves.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass and the tooltip adds its altitude, illumination fraction, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
@@ -745,163 +731,6 @@ function altFromAirmass(x) {
     if (kastyAir(mid) > target) lo = mid; else hi = mid;
   }
   return 0.5 * (lo + hi);
-}
-
-// ------------------------------------------------------------------ S/N model
-// Single-exposure S/N in the V band. The same equations are mirrored in
-// airmass_gui.sn (Python) and cross-tested against it in the test suite.
-var SNR_V_ZERP = 8.75e5;    // photons cm^-2 s^-1, V = 0, integrated over the V band
-var SNR_SKY_DARK = 21.9;    // mag arcsec^-2, dark sky (no Moon)
-var SNR_PSF_COEF = 1.1364;  // effective PSF pixel-count coefficient
-
-/**
- * Compute the collecting area of a circular telescope.
- *
- * @param {number} apertureM - Primary diameter in metres.
- * @returns {number} Collecting area in cm^2.
- */
-function snrArea(apertureM) {
-  var radiusCm = 0.5 * apertureM * 100.0;
-  return Math.PI * radiusCm * radiusCm;
-}
-
-/**
- * Evaluate the full-Moon sky darkening at a given separation.
- *
- * A constant plus two exponentials, anchored to give 4.5 mag at 0 deg
- * and 2.15 mag at 90 deg, matching the V-band Moon-darkening
- * measurements of Houdashelt et al. (2005).
- *
- * @param {number} sepDeg - Moon-target separation in degrees; negative
- *     values are clamped to 0.
- * @returns {number} Sky darkening in magnitudes for a full Moon.
- */
-function snrMoonSep(sepDeg) {
-  var s = Math.max(0, sepDeg);
-  return 2.10 + 1.832 * Math.exp(-s / 25.0) + 0.568 * Math.exp(-s / 6.0);
-}
-
-/**
- * Evaluate the Moon's sky darkening for a given phase and altitude.
- *
- * The full-Moon curve is scaled by the illuminated fraction and by the
- * sine of the Moon's altitude, so it vanishes at new Moon and below
- * the horizon.
- *
- * @param {number} sepDeg - Moon-target separation in degrees.
- * @param {number} illum - Illuminated fraction, 0 (new) to 1 (full).
- * @param {number} moonAltDeg - Moon altitude in degrees.
- * @returns {number} Sky darkening in magnitudes, >= 0.
- */
-function snrMoonDarkening(sepDeg, illum, moonAltDeg) {
-  var dim = Math.max(0, Math.sin(d2r(moonAltDeg)));
-  return illum * snrMoonSep(sepDeg) * dim;
-}
-
-/**
- * Compute the sky surface brightness including the Moon.
- *
- * @param {number} skyDark - Dark-sky brightness in mag arcsec^-2.
- * @param {number} deltaMag - Moon darkening in magnitudes, >= 0.
- * @returns {number} Sky brightness in mag arcsec^-2, <= skyDark.
- */
-function snrSkyMag(skyDark, deltaMag) { return skyDark - deltaMag; }
-
-/**
- * Compute the target photoelectron rate.
- *
- * The V-band zero point is attenuated by the target brightness, by
- * extinction along the extra (X - 1) airmasses of atmosphere, and by
- * the total system efficiency.
- *
- * @param {number} areaCm2 - Collecting area in cm^2.
- * @param {number} mag - Target V magnitude.
- * @param {number} airmass - Airmass X.
- * @param {number} kExt - Extinction in mag per airmass.
- * @param {number} eff - Total system efficiency, 0 to 1.
- * @returns {number} Target rate in e- s^-1.
- */
-function snrSourceRate(areaCm2, mag, airmass, kExt, eff) {
-  return SNR_V_ZERP * areaCm2 * Math.pow(10, -0.4 * mag) *
-         Math.pow(10, -0.4 * kExt * (airmass - 1.0)) * eff;
-}
-
-/**
- * Compute the sky photoelectron rate per pixel.
- *
- * The sky zero point per square arcsec is integrated over the pixel
- * area (plate scale squared), with the same extinction and efficiency
- * factors as the source.
- *
- * @param {number} areaCm2 - Collecting area in cm^2.
- * @param {number} skyMag - Sky brightness in mag arcsec^-2.
- * @param {number} airmass - Airmass X.
- * @param {number} kExt - Extinction in mag per airmass.
- * @param {number} eff - Total system efficiency, 0 to 1.
- * @param {number} pixScaleArcsec - Plate scale in arcsec per pixel.
- * @returns {number} Sky rate per pixel in e- s^-1 pixel^-1.
- */
-function snrSkyRate(areaCm2, skyMag, airmass, kExt, eff, pixScaleArcsec) {
-  return SNR_V_ZERP * areaCm2 * Math.pow(10, -0.4 * skyMag) *
-         Math.pow(10, -0.4 * kExt * (airmass - 1.0)) * eff *
-         pixScaleArcsec * pixScaleArcsec;
-}
-
-/**
- * Compute the effective number of pixels in the PSF.
- *
- * @param {number} fwhmArcsec - PSF full width at half maximum in arcsec.
- * @param {number} pixScaleArcsec - Plate scale in arcsec per pixel.
- * @returns {number} Effective pixel count, 1.1364 (FWHM / scale)^2.
- */
-function snrPsfPixels(fwhmArcsec, pixScaleArcsec) {
-  return SNR_PSF_COEF * Math.pow(fwhmArcsec / pixScaleArcsec, 2);
-}
-
-/**
- * Compute the S/N of a single exposure of duration t.
- *
- * SNR = a t / sqrt(a t + c t + r), where a is the source rate in
- * e- s^-1, c the sky-plus-dark rate over the PSF in e- s^-1, and r the
- * read-noise variance in e-^2. The read noise is added once per
- * exposure.
- *
- * @param {number} srcRate - Target rate in e- s^-1.
- * @param {number} skyRatePerPix - Sky rate in e- s^-1 pixel^-1.
- * @param {number} nPix - Effective PSF pixel count.
- * @param {number} darkRatePerPix - Dark current in e- s^-1 pixel^-1.
- * @param {number} readNoise - Read noise in e- (rms) per pixel.
- * @param {number} tSec - Exposure time in seconds.
- * @returns {number} Signal-to-noise ratio.
- */
-function snrValue(srcRate, skyRatePerPix, nPix, darkRatePerPix, readNoise, tSec) {
-  var c = nPix * (skyRatePerPix + darkRatePerPix);
-  var r = nPix * readNoise * readNoise;
-  var signal = srcRate * tSec;
-  var noise = Math.sqrt(signal + c * tSec + r);
-  return signal / noise;
-}
-
-/**
- * Solve for the exposure time that reaches a target S/N.
- *
- * Solves SNR = a t / sqrt((a + c) t + r) = T for the positive root,
- * which is quadratic in t.
- *
- * @param {number} srcRate - Target rate in e- s^-1.
- * @param {number} skyRatePerPix - Sky rate in e- s^-1 pixel^-1.
- * @param {number} nPix - Effective PSF pixel count.
- * @param {number} darkRatePerPix - Dark current in e- s^-1 pixel^-1.
- * @param {number} readNoise - Read noise in e- (rms) per pixel.
- * @param {number} targetSnr - Desired S/N, T > 0.
- * @returns {number} Exposure time in seconds.
- */
-function snrSolveTime(srcRate, skyRatePerPix, nPix, darkRatePerPix, readNoise, targetSnr) {
-  var ac = srcRate + nPix * (skyRatePerPix + darkRatePerPix);
-  var r = nPix * readNoise * readNoise;
-  var T = targetSnr;
-  var disc = (T * T * ac) * (T * T * ac) + 4 * srcRate * srcRate * T * T * r;
-  return (T * T * ac + Math.sqrt(disc)) / (2 * srcRate * srcRate);
 }
 
 /**
@@ -2210,9 +2039,10 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
  * Keeps older saved states and imported files working.
  *
  * @param {Object} s - Workspace state; its options object is completed
- *     in place. The curve option is validated against the three modes and
- *     falls back to "airmass", snrOn (S/N panel visibility) defaults to
- *     off, and the snr sub-object is normalized by normalizeSnr.
+ *     in place with defaults for every display option. The curve option
+ *     is validated against the three modes and falls back to
+ *     "airmass", and an unrecognised finding-survey entry falls back to
+ *     the Digitized Sky Survey.
  * @returns {Object} The same state object.
  */
 function normalizeState(s) {
@@ -2226,7 +2056,6 @@ function normalizeState(s) {
     calendar: true,
     weather: false,
     curve: "airmass",
-    snrOn: false,
     extraInfo: false,
     finding: false,
     findingSurvey: "Digitized Sky Survey",
@@ -2241,49 +2070,7 @@ function normalizeState(s) {
   if (SURVEYS.indexOf(opts.findingSurvey) < 0)
     opts.findingSurvey = "Digitized Sky Survey";
   s.options = opts;
-  s.options.snr = normalizeSnr(s.options.snr);
   return s;
-}
-
-// Default S/N estimate settings; normalized and clamped by normalizeSnr.
-var SNR_DEFAULTS = { ap: 2.0, fwhm: 1.0, pix: 0.2, rn: 5.0, dark: 0.1,
-                     eff: 50, k: 0.10, target: 10, fixed: 0 };
-
-/**
- * Normalize the S/N estimate settings, filling and clamping defaults.
- *
- * Each field is read from the saved settings (sn); a missing or
- * non-numeric value takes its default. Aperture, FWHM, plate scale and
- * target S/N are clamped to positive values and efficiency to at most
- * 100 percent.
- *
- * @param {?Object} sn - Saved S/N settings, or null for a fresh state.
- * @returns {Object} Settings with every field present and in range: ap
- *     (aperture, m), fwhm (PSF, arcsec), pix (plate scale, arcsec per
- *     pixel), rn (read noise, e-), dark (dark current, e- s^-1 pixel^-1),
- *     eff (efficiency, percent), k (extinction, mag per airmass),
- *     target (target S/N), and fixed (fixed exposure, s; 0 means solve
- *     for the time).
- */
-function normalizeSnr(sn) {
-  function num(key, min) {
-    var v = sn ? Number(sn[key]) : NaN;
-    if (!isFinite(v) || v < min) return SNR_DEFAULTS[key];
-    return v;
-  }
-  var eff = num("eff", 0);
-  if (eff > 100) eff = 100;
-  return {
-    ap: num("ap", 0.01),
-    fwhm: num("fwhm", 0.01),
-    pix: num("pix", 0.01),
-    rn: num("rn", 0),
-    dark: num("dark", 0),
-    eff: eff,
-    k: num("k", 0),
-    target: num("target", 1),
-    fixed: num("fixed", 0),
-  };
 }
 
 /**
@@ -2543,26 +2330,14 @@ function syncAllControls() {
   $("windows-chk").checked = !!state.options.windows;
   $("threshold").value = state.options.threshold;
   $("curve-sel").value = state.options.curve;
-  var sn = state.options.snr;
-  $("snr-ap").value = sn.ap;
-  $("snr-fwhm").value = sn.fwhm;
-  $("snr-pix").value = sn.pix;
-  $("snr-rn").value = sn.rn;
-  $("snr-dark").value = sn.dark;
-  $("snr-eff").value = sn.eff;
-  $("snr-k").value = sn.k;
-  $("snr-target").value = sn.target;
-  $("snr-fixed").value = sn.fixed;
   $("moon-chk").checked = !!state.options.moon;
   $("civil-chk").checked = !!state.options.civil;
   $("nautical-chk").checked = !!state.options.nautical;
   $("dusk-chk").checked = !!state.options.dusk;
   $("weather-chk").checked = !!state.options.weather;
   $("calendar-chk").checked = !!state.options.calendar;
-  $("snr-chk").checked = !!state.options.snrOn;
   $("extra-chk").checked = !!state.options.extraInfo;
   $("summary-panel").style.display = state.options.windows ? "" : "none";
-  $("snr-panel").style.display = state.options.snrOn ? "" : "none";
   $("finding-chk").checked = !!state.options.finding;
   $("finding-survey").value = state.options.findingSurvey;
   $("finding-panel").style.display = state.options.finding ? "" : "none";
@@ -2726,7 +2501,7 @@ function renderTargets() {
       '<input placeholder="Name" title="Name">' +
       '<input placeholder="RA (h:m:s / deg)" title="RA">' +
       '<input placeholder="Dec (d:m:s / deg)" title="Dec">' +
-      '<input placeholder="V mag" title="V magnitude, used by the S/N estimate" inputmode="decimal">' +
+      '<input placeholder="V mag" title="V magnitude" inputmode="decimal">' +
       '<span class="info" title="Lookup info; click to clear"></span>' +
       '<button class="hz" title="Fetch this target\'s ephemeris from JPL Horizons (moving objects)" type="button">Horizons</button>' +
       '<button class="rm" title="Remove" type="button">&#215;</button>';
@@ -2941,84 +2716,6 @@ function clearSummary() {
  */
 
 /**
- * Collect the S/N model inputs for one target at one instant.
- *
- * Resolves the target's coordinates, airmass, and the Moon's position
- * and phase at the given time, combined with the state's S/N settings.
- *
- * @param {Object} obj - A state target (needs ra, dec, and a finite mag).
- * @param {number} ms - Epoch milliseconds (UTC).
- * @returns {?Object} The parameters for snrFor(), or null when the
- *     target has no magnitude, is below the horizon, or S/N settings
- *     are absent.
- */
-function snrParamsFor(obj, ms) {
-  var sn = state.options.snr;
-  if (!sn || !isFinite(obj.mag)) return null;
-  var obs = state.observatory;
-  var jd = jdFromUtcMs(ms);
-  var c = objCoords(obj, ms);
-  var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
-  var x = airmass(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon));
-  if (!isFinite(x)) return null;
-  var m = moonRaDec(jd);
-  return {
-    apertureM: sn.ap, fwhmArcsec: sn.fwhm, pixScaleArcsec: sn.pix,
-    readNoise: sn.rn, darkRatePerPix: sn.dark, eff: sn.eff / 100,
-    kExt: sn.k, mag: obj.mag, airmass: x, skyDark: SNR_SKY_DARK,
-    moonSepDeg: angularSep(tt.raDeg / 15, tt.dec, m.raH, m.dec),
-    moonIllum: moonPhase(jd).illum,
-    moonAltDeg: altitude(m.raH, m.dec, jd, obs.lat, obs.lon),
-    targetSnr: sn.target,
-  };
-}
-
-/**
- * Estimate the S/N of a single exposure for one target at one instant.
- *
- * With a positive fixed exposure, reports the S/N reached by that
- * exposure; otherwise solves for the exposure time that reaches the
- * target S/N.
- *
- * @param {Object} obj - A state target.
- * @param {number} ms - Epoch milliseconds (UTC).
- * @returns {?{tSec: number, snr: number}} The exposure time (s) and the
- *     S/N it reaches (the target S/N when solved), or null when
- *     snrParamsFor returns null.
- */
-function snrFor(obj, ms) {
-  var p = snrParamsFor(obj, ms);
-  if (!p) return null;
-  var sn = state.options.snr;
-  var area = snrArea(p.apertureM);
-  var skyMag = snrSkyMag(
-    p.skyDark, snrMoonDarkening(p.moonSepDeg, p.moonIllum, p.moonAltDeg));
-  var src = snrSourceRate(area, p.mag, p.airmass, p.kExt, p.eff);
-  var sky = snrSkyRate(area, skyMag, p.airmass, p.kExt, p.eff, p.pixScaleArcsec);
-  var nPix = snrPsfPixels(p.fwhmArcsec, p.pixScaleArcsec);
-  if (sn.fixed > 0) {
-    return { tSec: sn.fixed,
-             snr: snrValue(src, sky, nPix, p.darkRatePerPix, p.readNoise, sn.fixed) };
-  }
-  return { tSec: snrSolveTime(src, sky, nPix, p.darkRatePerPix, p.readNoise, p.targetSnr),
-           snr: p.targetSnr };
-}
-
-/**
- * Format an exposure time for the summary panel.
- *
- * @param {number} tSec - Exposure time in seconds.
- * @returns {string} Seconds below 60, minutes below 3600, else hours,
- *     each to one decimal ("12.3 s" / "45.6 min" / "1.2 h").
- */
-function snrTimeStr(tSec) {
-  if (!isFinite(tSec)) return "—";
-  if (tSec < 60) return tSec.toFixed(1) + " s";
-  if (tSec < 3600) return (tSec / 60).toFixed(1) + " min";
-  return (tSec / 3600).toFixed(1) + " h";
-}
-
-/**
  * Compute the observing-window data for the summary panel and CSV export.
  *
  * Samples each target's altitude on an at-most-800-point grid over the
@@ -3140,9 +2837,8 @@ function summaryData() {
  * Shows the cumulative totals header, then, per target and local day,
  * the window list with durations, the total field rotation accrued
  * while the target is below the airmass threshold (fieldRotationDeg),
- * the single-exposure S/N note at each run midpoint (snrFor; "exp t"
- * when solving for the time, "SNR v" for a fixed exposure) when the
- * S/N panel is enabled, transit airmass, and below-horizon or
+ * transit airmass, the Moon's phase at mid-night, the average
+ * clear-sky fraction when weather is on, and below-horizon or
  * no-window notes.
  */
 function renderSummary() {
@@ -3179,13 +2875,6 @@ function renderSummary() {
         d.runs.forEach(function (run) {
           var rot = fieldRotationDeg(t.obj, run[0], run[1], obs.lat, obs.lon);
           var note = isFinite(rot) ? "rot " + rot.toFixed(1) + "\u00b0" : "\u2014";
-          if (state.options.snrOn) {
-            var s = snrFor(t.obj, 0.5 * (run[0] + run[1]));
-            var sn = state.options.snr;
-            note += " \u00b7 " + (sn && sn.fixed > 0 ?
-              (s ? "SNR " + s.snr.toFixed(1) : "\u2014") :
-              (s ? "exp " + snrTimeStr(s.tSec) : "\u2014"));
-          }
           parts.push(hmStr(data.tz, run[0]) + "\u2013" + hmStr(data.tz, run[1]) +
                      " \u00b7 " + ((run[1] - run[0]) / 3600000).toFixed(1) + " h" +
                      " \u00b7 " + note);
@@ -4218,7 +3907,7 @@ function applyChartResize(st, x, y) {
 // bottom-right corner (both); the manual size persists for the session.
 var PANEL_MIN_W = 220, PANEL_MIN_H = 96;  // panel resize bounds (px)
 var RESIZABLE_PANELS = ["panel-observatory", "panel-time", "panel-display",
-                        "panel-targets", "snr-panel", "panel-workspace",
+                        "panel-targets", "panel-workspace",
                         "summary-panel", "calendar-panel",
                         "finding-panel"];
 
@@ -4793,12 +4482,6 @@ $("calendar-chk").addEventListener("change", function () {
   saveState();
   scheduleRedraw();
 });
-$("snr-chk").addEventListener("change", function () {
-  state.options.snrOn = this.checked;
-  $("snr-panel").style.display = this.checked ? "" : "none";
-  saveState();
-  scheduleRedraw();
-});
 $("extra-chk").addEventListener("change", function () {
   state.options.extraInfo = this.checked;
   renderTargets();
@@ -4808,19 +4491,6 @@ $("curve-sel").addEventListener("change", function () {
   state.options.curve = this.value;
   saveState();
   scheduleRedraw();
-});
-// S/N estimate inputs: numeric, written straight into state.options.snr.
-["snr-ap", "snr-fwhm", "snr-pix", "snr-rn", "snr-dark", "snr-eff",
- "snr-k", "snr-target", "snr-fixed"].forEach(function (id) {
-  var key = id.slice(4);
-  $(id).addEventListener("input", function () {
-    var v = parseFloat(this.value);
-    if (!isFinite(v) || v < 0) return;
-    if (key === "eff" && v > 100) v = 100;
-    state.options.snr[key] = v;
-    saveState();
-    scheduleRedraw();
-  });
 });
 // Threshold: enforce the 1.05 airmass minimum.
 $("threshold").addEventListener("input", function () {

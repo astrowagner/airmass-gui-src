@@ -21,7 +21,7 @@ from astropy import units as u
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord, TETE, get_body, get_sun
 from astropy.time import Time
 
-from airmass_gui import astro, chart, lookup, sn
+from airmass_gui import astro, chart, lookup
 from airmass_gui.observatories import PRESETS, RENAME_MAP, to_dict
 from airmass_gui.site import THEMES, _blend_hex, build_site
 from airmass_gui.workspace import new_workspace
@@ -51,8 +51,6 @@ CORE_FUNCTIONS = [
     "findingStarSize",
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
     "skyViewPosition", "skyViewQueryUrl",
-    "snrArea", "snrMoonSep", "snrMoonDarkening", "snrSkyMag",
-    "snrSourceRate", "snrSkyRate", "snrPsfPixels", "snrValue", "snrSolveTime",
     "blendHex",
 ]
 
@@ -278,7 +276,7 @@ class SitePageTests(unittest.TestCase):
         """Every rounded panel and the chart box expose the manual resize
         edges (right, bottom, corner) with matching cursors."""
         for pid in ("panel-observatory", "panel-time", "panel-display",
-                    "panel-targets", "snr-panel", "panel-workspace",
+                    "panel-targets", "panel-workspace",
                     "summary-panel", "calendar-panel"):
             self.assertIn('id="%s"' % pid, self.page)
         self.assertIn("function makePanelResizable(", self.page)
@@ -417,14 +415,6 @@ class SitePageTests(unittest.TestCase):
             self.assertIn('<option value="%s">%s</option>' % (mode, label), self.page)
         self.assertIn('$("curve-sel").addEventListener("change"', self.page)
         self.assertIn('state.options.curve = this.value', self.page)
-
-    def test_snr_control_present(self):
-        """The S/N panel offers all nine inputs, a handler per one, and normalized state."""
-        for field in ("ap", "fwhm", "pix", "rn", "dark", "eff", "k",
-                      "target", "fixed"):
-            self.assertIn('<input id="snr-%s"' % field, self.page)
-        self.assertIn("state.options.snr[key] = v", self.page)
-        self.assertIn("s.options.snr = normalizeSnr(s.options.snr);", self.page)
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
@@ -1305,95 +1295,6 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertEqual(rows[1][0], 1770012000000)
         with self.assertRaises(Exception):
             self._js("horizonsParse('ERROR: no rows here')")
-
-
-    def test_snr_moon_sep(self):
-        """snrMoonSep agrees with sn.snr_moon_sep on a separation grid and the anchors."""
-        for sep in (0.0, 5.0, 10.0, 25.0, 45.0, 90.0, 120.0, -30.0):
-            self.assertAlmostEqual(
-                self._js(f"snrMoonSep({sep})"), sn.snr_moon_sep(sep), places=9, msg=sep)
-        self.assertAlmostEqual(self._js("snrMoonSep(0)"), 4.5, places=2)
-        self.assertAlmostEqual(self._js("snrMoonSep(90)"), 2.15, places=2)
-
-    def test_snr_moon_darkening(self):
-        """snrMoonDarkening scales the full-Moon curve by phase and altitude."""
-        for sep, illum, alt in ((0.0, 1.0, 45.0), (30.0, 0.5, 20.0),
-                                (90.0, 0.25, 80.0), (10.0, 1.0, -5.0),
-                                (45.0, 0.0, 60.0)):
-            self.assertAlmostEqual(
-                self._js(f"snrMoonDarkening({sep}, {illum}, {alt})"),
-                sn.snr_moon_darkening(sep, illum, alt), places=9,
-                msg=(sep, illum, alt))
-        self.assertEqual(self._js("snrMoonDarkening(10, 1, -5)"), 0.0)
-
-    def test_snr_rates(self):
-        """Source and sky rates and the PSF pixel count agree with sn."""
-        for aperture in (0.5, 2.0, 8.2):
-            self.assertAlmostEqual(
-                self._js(f"snrArea({aperture})"), sn.snr_area(aperture), places=6)
-        for fwhm, scale in ((1.0, 0.2), (0.8, 0.063), (2.5, 0.5)):
-            self.assertAlmostEqual(
-                self._js(f"snrPsfPixels({fwhm}, {scale})"),
-                sn.snr_psf_pixels(fwhm, scale), places=6)
-        args = dict(area_cm2=31000.0, mag=3.5, airmass=1.8, k_ext=0.1, eff=0.55)
-        self.assertAlmostEqual(
-            self._js("snrSourceRate(31000, 3.5, 1.8, 0.1, 0.55)"),
-            sn.snr_source_rate(**args), places=4)
-        self.assertAlmostEqual(
-            self._js("snrSkyRate(31000, 21.3, 1.8, 0.1, 0.55, 0.2)"),
-            sn.snr_sky_rate(31000.0, 21.3, 1.8, 0.1, 0.55, 0.2), places=4)
-        self.assertAlmostEqual(
-            self._js("snrSkyMag(21.9, 1.25)"),
-            sn.snr_sky_mag(21.9, 1.25), places=9)
-
-    def test_snr_value_and_solve_time(self):
-        """snrValue and snrSolveTime agree with sn, and the solve inverts the value."""
-        rng = random.Random(11)
-        for _ in range(20):
-            src_rate = 10.0 ** rng.uniform(1.0, 4.0)
-            sky = 10.0 ** rng.uniform(-1.0, 1.0)
-            n_pix = 10.0 ** rng.uniform(0.0, 2.0)
-            dark = 10.0 ** rng.uniform(-3.0, -0.5)
-            rn = 10.0 ** rng.uniform(0.0, 1.5)
-            t = 10.0 ** rng.uniform(0.0, 3.0)
-            self.assertAlmostEqual(
-                self._js(f"snrValue({src_rate}, {sky}, {n_pix}, {dark}, {rn}, {t})"),
-                sn.snr_value(src_rate, sky, n_pix, dark, rn, t), places=4)
-            T = 10.0 ** rng.uniform(0.5, 2.0)
-            self.assertAlmostEqual(
-                self._js(f"snrSolveTime({src_rate}, {sky}, {n_pix}, {dark}, {rn}, {T})"),
-                sn.snr_solve_time(src_rate, sky, n_pix, dark, rn, T), places=4)
-            # the solved time must invert back to the target S/N
-            tSolved = self._js(
-                f"snrSolveTime({src_rate}, {sky}, {n_pix}, {dark}, {rn}, {T})")
-            self.assertAlmostEqual(
-                self._js(
-                    f"snrValue({src_rate}, {sky}, {n_pix}, {dark}, {rn}, {tSolved})"),
-                T, places=4)
-
-    def test_snr_pipeline(self):
-        """The full V-band pipeline (area, moon, sky, rates, solve) agrees with sn end to end."""
-        aperture, fwhm, scale = 2.0, 0.8, 0.2
-        mag, x, k, eff = 4.0, 1.5, 0.12, 0.5
-        sep, illum, m_alt = 55.0, 0.62, 35.0
-        area = sn.snr_area(aperture)
-        dark_mag = sn.snr_moon_darkening(sep, illum, m_alt)
-        sky_mag = sn.snr_sky_mag(sn.SNR_SKY_DARK, dark_mag)
-        src = sn.snr_source_rate(area, mag, x, k, eff)
-        sky = sn.snr_sky_rate(area, sky_mag, x, k, eff, scale)
-        n_pix = sn.snr_psf_pixels(fwhm, scale)
-        T = 15.0
-        want = sn.snr_solve_time(src, sky, n_pix, 0.1, 5.0, T)
-        js = (
-            f"snrSolveTime("
-            f"snrSourceRate(snrArea({aperture}), {mag}, {x}, {k}, {eff}), "
-            f"snrSkyRate(snrArea({aperture}), "
-            f"snrSkyMag({sn.SNR_SKY_DARK}, snrMoonDarkening({sep}, {illum}, {m_alt})), "
-            f"{x}, {k}, {eff}, {scale}), "
-            f"snrPsfPixels({fwhm}, {scale}), 0.1, 5.0, {T})"
-        )
-        self.assertAlmostEqual(self._js(js), want, places=4)
-
 
 if __name__ == "__main__":
     unittest.main()
