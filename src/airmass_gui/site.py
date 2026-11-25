@@ -147,7 +147,6 @@ header .theme-field { margin-left: auto; display: flex; align-items: center;
 header .theme-field select { flex: none; }
 html[data-theme="red"] body { filter: grayscale(1) sepia(1) hue-rotate(-32deg)
                               saturate(3.2) brightness(1.08); }
-header p { margin: 0; color: var(--fg-dim); }
 .layout { display: grid; grid-template-columns: 340px 1fr; gap: 1rem; margin-top: 1rem; }
 @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
 #sidebar { position: relative; min-width: 0; }
@@ -288,9 +287,6 @@ footer li { margin-bottom: 0.2rem; }
   <option value="red">Red (night)</option>
 </select></label>
 </div>
-<p>Airmass (X) for the targets below, as seen from this observatory.
-   Every control is live; your edits are saved in this browser and encoded in
-   the page URL, so the address bar is a shareable link.</p>
 </header>
 <div class="layout" id="layout">
 <aside id="sidebar">
@@ -419,6 +415,20 @@ footer li { margin-bottom: 0.2rem; }
 </main>
 </div>
 <footer>
+<details id="instructions">
+<summary>Instructions</summary>
+<ul>
+<li><b>Observatory</b>: pick a preset or enter latitude, longitude, and elevation; the time zone dropdown lists common zones (the current zone is preselected).</li>
+<li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night.</li>
+<li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold, the shaded usable bands, and the per-night list; Moon, the twilight overlays, Weather, and Extra info toggle their features.</li>
+<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, and &#215; removes it.</li>
+<li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph marks each local midnight.</li>
+<li><b>Observing windows</b>: per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, and the Moon's phase at mid-night.</li>
+<li><b>Annual calendar</b>: twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
+<li><b>Workspace</b>: save named copies in this browser, import an exported JSON file, export, Copy link (encodes the full setup in the URL), download the chart as a PNG, and reset to the initial state.</li>
+<li><b>Theme</b>: Dark, Light, or Red for night observing; the choice is remembered in this browser.</li>
+</ul>
+</details>
 <details id="extra-details">
 <summary>Extra details</summary>
 <ul>

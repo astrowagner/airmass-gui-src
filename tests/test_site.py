@@ -1296,5 +1296,24 @@ class JsCoreNumericTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self._js("horizonsParse('ERROR: no rows here')")
 
+    def test_instructions_dropdown(self):
+        """The footer carries an Instructions dropdown; the header keeps only the title."""
+        self.assertIn('<details id="instructions">', self.page)
+        self.assertIn('<summary>Instructions</summary>', self.page)
+        for lead in ("<b>Observatory</b>", "<b>Time range</b>", "<b>Display</b>",
+                     "<b>Targets</b>", "<b>Main chart</b>", "<b>Observing windows</b>",
+                     "<b>Annual calendar</b>", "<b>Workspace</b>", "<b>Theme</b>"):
+            self.assertIn(lead, self.page)
+        self.assertNotIn("<p>Airmass (X) for the targets below", self.page)
+
+    def test_no_snr_leftovers(self):
+        """The S/N estimate component is gone from the page."""
+        self.assertNotIn("S/N", self.page)
+        self.assertNotIn("snr-", self.page)
+        self.assertNotIn("snrOn", self.page)
+        self.assertNotIn("normalizeSnr", self.page)
+
+
+
 if __name__ == "__main__":
     unittest.main()
