@@ -45,7 +45,7 @@ CORE_FUNCTIONS = [
     "parseDec", "simbadParseRecord", "parallaxDistance", "formatDistance", "pmText",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
-    "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
+    "moonRaDec", "moonTopocentric", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "fieldRotationDeg",
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
@@ -873,6 +873,69 @@ class SkyViewPositionTests(unittest.TestCase):
             got_ra, got_dec = self._link_position_deg(ra, dec)
             self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
             self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class MoonTopocentricTests(unittest.TestCase):
+    """The displayed Moon is topocentric, not geocentric.
+
+    The geocentric Moon and the Moon an observer sees differ by the
+    diurnal parallax: at the LBT over 30 days the altitude differs by
+    0.74 deg on mean and 1.03 deg at most (against astropy's
+    topocentric Moon). moonTopocentric adds the correction of Meeus,
+    Astronomical Algorithms (2nd ed.), chapters 11 and 40.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = tempfile.TemporaryDirectory()
+        cls.page = build_site(new_workspace(),
+                              Path(cls.dir.name) / "index.html").read_text(
+            encoding="utf-8")
+        cls.js = dukpy.JSInterpreter()
+        cls.js.evaljs(_extract_core(cls.page))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.dir.cleanup()
+
+    def test_moon_altitude_is_topocentric(self):
+        """Hourly for 30 days at the LBT, within 0.05 deg of astropy.
+
+        astropy's get_body('moon', t, location) is the topocentric
+        apparent position; the AltAz frame's refraction is zeroed,
+        as the page applies none.
+        """
+        loc = EarthLocation.from_geodetic(
+            LBT.lon * u.deg, LBT.lat * u.deg, LBT.elevation_m)
+        t0 = Time("2026-11-25 00:00:00")
+        max_diff = 0.0
+        n = 0
+        for i in range(720):
+            t = t0 + i * 3600 * u.s
+            aa = AltAz(obstime=t, location=loc)
+            aa.refraction = 0 * u.deg
+            alt_astro = float(
+                SkyCoord(get_body("moon", t, loc)).transform_to(aa).alt.deg)
+            if alt_astro < -2.0:
+                continue
+            jd = float(t.jd)
+            moon = json.loads(self.js.evaljs(
+                "JSON.stringify(moonTopocentric(%r, %r, %r, %r))"
+                % (jd, LBT.lat, LBT.lon, LBT.elevation_m)))
+            alt_js = self.js.evaljs(
+                "horizonCoords(%r, %r, %r, %r, %r).alt"
+                % (moon["raH"], moon["dec"], jd, LBT.lat, LBT.lon))
+            n += 1
+            max_diff = max(max_diff, abs(alt_js - alt_astro))
+        self.assertGreater(n, 300)
+        self.assertLess(max_diff, 0.05)
+
+    def test_page_draw_and_tooltip_use_topocentric_moon(self):
+        """draw() and the tooltip call moonTopocentric, not moonRaDec."""
+        self.assertGreaterEqual(
+            self.page.count("moonTopocentric(jd, obs.lat, obs.lon, obs.elevation_m)"),
+            2)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

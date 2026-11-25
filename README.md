@@ -58,9 +58,11 @@ Workspace panel also keeps named workspaces in the browser (**Import JSON**
 loads one back) and **PNG** downloads the current chart. The **Windows**
 option adds an airmass threshold line, per-target usable-window bands,
 transit ticks on the time axis, and a per-night summary panel; **Moon**
-overlays the Moon's airmass (truncated NAO 1954/ELP theory, ~0.015 deg from
-the full ephemeris) with illumination and per-target moon separation in the
-hover tooltip; **Civil** / **Nautical twilight** mark the sun's -6 and -12
+overlays the Moon's airmass as seen from the observatory (topocentric
+position: the geocentric NAO 1954/ELP position, truncated at 105 terms,
+agrees with astropy's geocentric ephemeris to ~0.015 deg, with diurnal
+parallax added per Meeus) with illumination and per-target moon
+separation in the hover tooltip; **Civil** / **Nautical twilight** mark the sun's -6 and -12
 degree crossings as thin vertical lines. The chart is navigable by wheel and
 drag or by touch (one finger pans, two fingers pinch to zoom, tap shows the
 tooltip); keyboard shortcuts: arrow keys pan, `+` / `-` zoom around the
