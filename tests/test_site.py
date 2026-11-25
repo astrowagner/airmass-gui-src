@@ -9,6 +9,7 @@ import json
 import math
 import random
 import re
+import urllib.parse
 import tempfile
 import unittest
 from urllib.parse import quote, unquote
@@ -470,7 +471,7 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('function skyViewPosition(', self.page)
         self.assertIn('function skyViewQueryUrl(', self.page)
         self.assertIn(
-            'precessIcrsToTete(c.raDeg, c.dec, jdFromUtcMs(Date.now()))',
+            'skyViewQueryUrl($("finding-survey").value, c.raDeg, c.dec)',
             self.page)
         self.assertIn('function findingRadiusText(', self.page)
         self.assertIn('skyview.gsfc.nasa.gov/current/cgi/runquery.pl',
@@ -796,6 +797,82 @@ class SecurityPageTests(unittest.TestCase):
                           fn + " did not escape the name")
             self.assertNotIn("<b>x</b>", html,
                              fn + " contains raw markup in the name")
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class SkyViewPositionTests(unittest.TestCase):
+    """The SkyView link is centered on the target's J2000 position.
+
+    SkyView's quick interface works in J2000, so the link must carry
+    the J2000 position that objCoords returns, not the precessed
+    equinox-of-date position; precessing shifts the image center by
+    the precession (10.7 arcmin for Vega on 2026-11-25), which puts
+    the target outside the returned field.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__",
+                          json.dumps(json.dumps({}))))
+        cls.interp = dukpy.JSInterpreter()
+        cls.interp.evaljs(stubs + ";" + chr(10) + "0")
+        cls.interp.evaljs(script + ";" + chr(10) + "0")
+
+    def _link_position_deg(self, ra, dec):
+        """Return the link's Position parsed back to (raDeg, decDeg)."""
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "t", "ra": ra, "dec": dec}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '640';"
+            "updateFindingChart();"
+        )
+        href = self.interp.evaljs(
+            "JSON.stringify($('finding-skylink').href)")
+        pos = urllib.parse.unquote(
+            re.search(r"[?&]Position=([^&]+)", href).group(1))
+        ra_half, dec_half = pos.split(" ")
+        ra_deg = ((int(ra_half[0:2]) + int(ra_half[2:4]) / 60 +
+                   float(ra_half[4:]) / 3600) * 15) % 360
+        sign = -1 if dec_half[0] == "-" else 1
+        dec_deg = sign * (int(dec_half[1:3]) + int(dec_half[3:5]) / 60 +
+                          float(dec_half[5:]) / 3600)
+        return ra_deg, dec_deg
+
+    def test_skylink_center_is_j2000(self):
+        """Vega, Sirius and M31 link within 1 arcsec of J2000."""
+        # J2000 positions per the audit reference (degrees).
+        for ra, dec, (want_ra, want_dec) in (
+                ("279.2347", "38.7837", (279.2347, 38.7837)),
+                ("101.2872", "-16.7161", (101.2872, -16.7161)),
+                ("00:42:44.33", "+41:16:07.32", (10.6847, 41.2687))):
+            got_ra, got_dec = self._link_position_deg(ra, dec)
+            self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
+            self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

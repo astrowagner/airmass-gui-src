@@ -473,7 +473,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Weather (hidden by default; enable it with the Weather checkbox in the Display panel): the cloud band fills the plot with the hourly cloud cover; a rain drop along the top marks hours with precipitation or at least a 40% rain chance and a lightning bolt marks thunderstorm hours (WMO weather codes 95/96/99); each per-night list adds the average clear-sky fraction. The forecast runs from about 16 days back to about 15 days ahead (needs internet).</li>
 <li>Moon symbols: a glyph at each local midnight shows the Moon&rsquo;s phase, with its illumination in percent beside it; always shown, independent of the Moon curve.</li>
 <li>Targets: with Extra info checked, a Target details window under the rows shows each target's full Simbad record (magnitudes in all bands, spectral type, parallax with its uncertainty and the inverted distance, proper motion, radial velocity, and identifiers); a row's status text shows the stored ephemeris point count, and clicking its cross clears the record and ephemeris.</li>
-<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart is drawn in J2000 while the image is centered on the target&rsquo;s equinox-of-date position, so the two agree to about a quarter of a degree; hovering the star chart shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name, angular offset from the cursor, and a detail table (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts); a second Simbad lookup by name adds the object's parallax with uncertainty, distance, proper motion, radial velocity, and identifiers to the table (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure); the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 5&deg;, with the current radius shown beside it, and the chart re-scales live as the slider moves.</li>
+<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart and the image are both centered on the target&rsquo;s J2000 position, so the two agree; hovering the star chart shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name, angular offset from the cursor, and a detail table (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts); a second Simbad lookup by name adds the object's parallax with uncertainty, distance, proper motion, radial velocity, and identifiers to the table (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure); the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 5&deg;, with the current radius shown beside it, and the chart re-scales live as the slider moves.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass and the tooltip adds its altitude, illumination fraction, phase name, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
@@ -2286,11 +2286,9 @@ function skyViewPosition(raDeg, decDeg) {
  *     values: Digitized Sky Survey, HEAO 1 A-2, RASS-Cnt Broad, TESS,
  *     IRAS 100 micron, 0408MHz.
  * @param {number} raDeg - RA of the image center, degrees (0-360),
- *     in the equinox the survey wants; the quick queries here use the
- *     equinox of date, so precess J2000 positions with
- *     precessIcrsToTete first.
+ *     J2000: the quick interface works in J2000.
  * @param {number} decDeg - Dec of the image center, degrees, signed,
- *     in the same equinox.
+ *     J2000.
  * @returns {string} URL of the SkyView quick query result page.
  */
 function skyViewQueryUrl(survey, raDeg, decDeg) {
@@ -5796,8 +5794,8 @@ function clearFindingInfo() {
  * responses. No-op while the option is off.
  *
  * @returns {void} Draws #finding-chart (J2000), points the SkyView
- *     page link at the target's equinox-of-date position
- *     (precessIcrsToTete, skyViewQueryUrl), updates #finding-status,
+ *     page link at the target's J2000 position (skyViewQueryUrl),
+ *     updates #finding-status,
  *     and sets the #finding-info hover source (findingHover).
  */
 function updateFindingChart() {
@@ -5822,12 +5820,11 @@ function updateFindingChart() {
   var zoom = parseInt($("finding-zoom").value, 10);
   var radiusArcmin = findingRadiusFromZoom(zoom);
   var link = $("finding-skylink");
-  // The image is centered on the equinox-of-date position; the chart
-  // itself stays in J2000.
-  var tet = precessIcrsToTete(c.raDeg, c.dec, jdFromUtcMs(Date.now()));
-  link.href = skyViewQueryUrl($("finding-survey").value, tet.raDeg, tet.dec);
+  // The image is centered on the J2000 position, the same frame the
+  // chart is drawn in; SkyView's quick interface works in J2000.
+  link.href = skyViewQueryUrl($("finding-survey").value, c.raDeg, c.dec);
   link.title = "Open the SkyView quick-query page for " + label +
-               " (equinox of date) in " + $("finding-survey").value;
+               " (J2000) in " + $("finding-survey").value;
   var rText = findingRadiusText(radiusArcmin);
   var key = c.raDeg.toFixed(4) + "," + c.dec.toFixed(4) + "," + radiusArcmin;
   if (findingCache[key]) {
