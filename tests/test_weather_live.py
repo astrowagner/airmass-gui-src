@@ -337,6 +337,11 @@ function __makeEl(tag, id) {
   el.getAttribute = function (k) { return (k in this) ? this[k] : null; };
   el.hasAttribute = function (k) { return k in this; };
   el.addEventListener = function (type, fn) { this.__handlers[type] = fn; };
+  el.dispatchEvent = function (ev) {
+    var h = this.__handlers && this.__handlers[ev.type];
+    if (h) h.call(this, ev);
+    return true;
+  };
   el.removeEventListener = function () {};
   el.appendChild = function (child) { this.children.push(child); child.parentElement = this; return child; };
   el.removeChild = function (child) {
@@ -492,6 +497,7 @@ AbortController = function () {
   var self = this;
   this.abort = function () { self.signal.aborted = true; };
 };
+Event = function (type) { this.type = type; };
 FileReader = function () {
   var self = this;
   this.readAsText = function (file) {

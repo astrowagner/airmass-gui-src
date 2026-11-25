@@ -41,7 +41,7 @@ CORE_FUNCTIONS = [
     "wrap360", "d2r", "r2d", "jdFromUtcMs", "gmstMeeus", "lstDeg", "altitude",
     "horizonCoords", "parallacticAngle", "parallacticAngleRate", "precessIcrsToTete", "kastyAir", "airmass", "horizonX", "altFromAirmass",
     "sunRaDec", "sunAltitude", "classifySunAlt", "sunShading", "parseRa",
-    "parseDec", "simbadParseRecord",
+    "parseDec", "simbadParseRecord", "parallaxDistance", "formatDistance", "pmText",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
     "moonRaDec", "moonPhase", "angularSep", "targetInfoText",
@@ -474,7 +474,7 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('.finding-pane:last-child { flex: 1 1 auto;'
                       ' min-width: 0; }', self.page)
-        self.assertIn('#finding-info { height: 8.8rem; overflow: hidden;',
+        self.assertIn('#finding-info { height: 8.8rem; overflow-y: auto;',
                       self.page)
         self.assertIn('#finding-info table { border-collapse: collapse;',
                       self.page)
@@ -493,6 +493,13 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('"finding-panel"', self.page)
         self.assertIn("finding: false", self.page)
         self.assertIn("Finding chart", self.page)
+        self.assertIn('<div id="target-tip"></div>', self.page)
+        self.assertIn("#target-tip { position: fixed", self.page)
+        self.assertIn("var findingDetailsCache", self.page)
+        self.assertIn("function maybeFetchFindingDetail(", self.page)
+        self.assertIn("function targetDetailTable(", self.page)
+        self.assertIn("function showTargetTip(", self.page)
+        self.assertIn("function parallaxDistance(", self.page)
 
     def test_script_injection_is_neutralized(self):
         """A hostile object name cannot open a second script tag."""
@@ -916,6 +923,21 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertAlmostEqual(got["mag"], float(expected["mag"]))
         self.assertEqual(got["spec"], expected["spec"])
         self.assertAlmostEqual(got["plx"], float(expected["plx"]))
+        self.assertAlmostEqual(got["plxErr"], float(expected["plxErr"]))
+        self.assertAlmostEqual(got["pmRa"], float(expected["pmRa"]))
+        self.assertAlmostEqual(got["pmDec"], float(expected["pmDec"]))
+        self.assertAlmostEqual(got["pmRaErr"], float(expected["pmRaErr"]))
+        self.assertAlmostEqual(got["pmDecErr"], float(expected["pmDecErr"]))
+        self.assertAlmostEqual(got["rv"], float(expected["rv"]))
+        self.assertEqual(got["idents"], expected["idents"])
+        self.assertEqual(got["idTotal"], expected["idTotal"])
+        self.assertEqual(set(got["fluxes"]), set(expected["fluxes"]))
+        for band, ref in expected["fluxes"].items():
+            self.assertAlmostEqual(got["fluxes"][band]["value"], ref["value"])
+            if ref["err"] is None:
+                self.assertIsNone(got["fluxes"][band]["err"])
+            else:
+                self.assertAlmostEqual(got["fluxes"][band]["err"], ref["err"])
         no_coords = "C.D.S.  -  SIMBAD4\n\nSome object\n----\nno coordinates here"
         self.assertIsNone(self._js(f"simbadParseRecord({json.dumps(no_coords)})"))
         minimal = ("C.D.S.  -  SIMBAD4\n\nFaint star\n--------\n"
@@ -924,6 +946,54 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIsNone(got2["mag"])
         self.assertIsNone(got2["spec"])
         self.assertIsNone(got2["plx"])
+        self.assertIsNone(got2["plxErr"])
+        self.assertIsNone(got2["pmRa"])
+        self.assertIsNone(got2["pmDec"])
+        self.assertIsNone(got2["rv"])
+        self.assertEqual(got2["fluxes"], {})
+        self.assertEqual(got2["idents"], [])
+        self.assertIsNone(got2["idTotal"])
+
+    def test_parallax_distance(self):
+        """parallaxDistance inverts mas to pc with error propagation; formatDistance picks units."""
+        d = self._js("parallaxDistance(130.23, 0.36)")
+        self.assertAlmostEqual(d["pc"], 1000.0 / 130.23, places=9)
+        self.assertAlmostEqual(d["errPc"], (1000.0 / 130.23) * 0.36 / 130.23,
+                               places=9)
+        self.assertEqual(self._js("formatDistance(7.678654, 0.021175)"),
+                         "7.68 pc \u00b1 0.02 pc")
+        self.assertEqual(self._js("formatDistance(1500, 30)"),
+                         "1.50 kpc \u00b1 0.03 kpc")
+        self.assertEqual(self._js("formatDistance(12.5)"), "12.5 pc")
+        self.assertIsNone(self._js("formatDistance(null, 0.02)"))
+        self.assertIsNone(self._js("parallaxDistance(null, 0.36)")["pc"])
+        self.assertIsNone(self._js("parallaxDistance(-1, 0.3)")["pc"])
+        self.assertIsNone(self._js("parallaxDistance(10, null)")["errPc"])
+
+    def test_target_detail_table(self):
+        """targetDetailTable renders every stored Simbad field, counting identifiers from idTotal."""
+        obj = {"name": "Vega", "mag": 0.03, "spec": "A0V",
+               "plx": 130.23, "plxErr": 0.36,
+               "pmRa": 200.94, "pmDec": 286.23, "pmRaErr": 0.32,
+               "pmDecErr": 0.4, "rv": -13.5,
+               "fluxes": {"U": {"value": 0.03, "err": None},
+                          "J": {"value": -0.177, "err": 0.206}},
+               "idents": ["TIC 157587146", "GJ 721"], "idTotal": 65}
+        html = self._js(f"targetDetailTable({json.dumps(obj)})")
+        self.assertIn("<th>Name</th><td>Vega</td>", html)
+        self.assertIn("<th>Mags</th><td>U 0.03  J -0.18 \u00b10.21</td>",
+                      html)
+        self.assertIn("<th>SpT</th><td>A0V</td>", html)
+        self.assertIn("<th>Parallax</th><td>130.23 \u00b1 0.36 mas</td>",
+                      html)
+        self.assertIn("<th>Distance</th><td>7.68 pc \u00b1 0.02 pc</td>",
+                      html)
+        self.assertIn("<th>Proper motion</th><td>RA +200.94\u00b10.32 / "
+                      "Dec +286.23\u00b10.40 mas/yr</td>", html)
+        self.assertIn("<th>Radial velocity</th><td>-13.5 km/s</td>", html)
+        self.assertIn("<th>Identifiers</th><td>TIC 157587146, GJ 721 "
+                      "(+ 63 more)</td>", html)
+        self.assertEqual(self._js("targetDetailTable({})"), "")
 
     def test_simbad_coo_parse(self):
         """simbadCooParse extracts the full default table column set."""
@@ -1020,6 +1090,36 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertNotIn("<th>SpT</th>", html2)
         self.assertNotIn("<th>From target</th>", html2)
 
+
+    def test_finding_detail_table_extra(self):
+        """findingDetailTable merges the sim-id record's fields and a pending row."""
+        row = {"raDeg": 279.186354, "dec": 38.783639,
+               "u": 0.03, "b": 0.03, "v": 0.03, "r": 0.07, "i": 0.10,
+               "spt": "A0V", "typ": "dS*", "distArcsec": 0.46,
+               "bib": 2817, "notn": 1}
+        idents = ["ID %d" % k for k in range(13)]
+        extra = {"spec": "A0V", "plx": 130.23, "plxErr": 0.36,
+                 "pmRa": 200.94, "pmDec": 286.23, "pmRaErr": 0.32,
+                 "pmDecErr": 0.4, "rv": -13.5,
+                 "fluxes": {"J": {"value": -0.177, "err": 0.206},
+                            "H": {"value": -0.029, "err": 0.146},
+                            "K": {"value": 0.129, "err": 0.186}},
+                 "idents": idents}
+        html = self._js("findingDetailTable(" + json.dumps(row) + ", " +
+                        json.dumps(extra) + ", true)")
+        self.assertIn("<th>Mags</th><td>U 0.03  B 0.03  V 0.03  R 0.07  "
+                      "I 0.10  J -0.18 \u00b10.21  H -0.03 \u00b10.15  "
+                      "K 0.13 \u00b10.19</td>", html)
+        self.assertIn("<th>Parallax</th><td>130.23 \u00b1 0.36 mas</td>",
+                      html)
+        self.assertIn("<th>Distance</th><td>7.68 pc \u00b1 0.02 pc</td>",
+                      html)
+        self.assertIn("<th>Proper motion</th><td>RA +200.94\u00b10.32 / "
+                      "Dec +286.23\u00b10.40 mas/yr</td>", html)
+        self.assertIn("<th>Radial velocity</th><td>-13.5 km/s</td>", html)
+        self.assertIn("<th>Identifiers</th>", html)
+        self.assertIn("(+ 1 more)", html)
+        self.assertIn("<th>Details</th><td>querying Simbad\u2026</td>", html)
 
     def test_share_fragment_round_trip(self):
         """encode/decodeShareFragment round-trip both ways; malformed fragments give null."""
