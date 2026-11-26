@@ -12,7 +12,7 @@ import re
 import urllib.parse
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, unquote
 from pathlib import Path
 
@@ -48,7 +48,7 @@ CORE_FUNCTIONS = [
     "parseDec", "simbadParseRecord", "parallaxDistance", "formatDistance", "pmText",
     "encodeShareFragment", "decodeShareFragment", "htmlEscape",
     "trueRuns", "transitTimes", "twilightEvents", "sunEvents",
-    "moonRaDec", "moonTopocentric", "moonPhase", "angularSep", "targetInfoText",
+    "moonRaDec", "moonTopocentric", "moonRiseSet", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "fieldRotationDeg",
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
@@ -1612,6 +1612,216 @@ class WorkspacePresetTests(unittest.TestCase):
         self.assertIn("Beta", ws)
         self.assertEqual([o[0] for o in self._ws_options(interp)],
                          ["Beta"])
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class MoonRiseSetTests(unittest.TestCase):
+    """The per-night list shows the Moon's rise and set and the day's
+    maximum hourly rain chance.
+
+    moonRiseSet scans the topocentric Moon's altitude at five-minute
+    steps over a local day's part of the chart and bisects each
+    horizon crossing; summaryData adds one entry per day, and
+    renderSummary lists the events in local time (or notes that the
+    Moon stays up or down for the whole window) and, with weather on,
+    appends the day's maximum hourly rain chance and the average
+    clear-sky fraction.
+    """
+
+    NOW = int(datetime(2026, 11, 25, 19, 0,
+                       tzinfo=timezone.utc).timestamp() * 1000)
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+        cls.js = dukpy.JSInterpreter()
+        cls.js.evaljs(_extract_core(cls.page))
+
+    def _interp(self):
+        """Page interpreter with the clock pinned at self.NOW."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs("Date.now = function () { return %d; }; 0"
+                      % self.NOW)
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _set_state(self, interp, start, days, weather):
+        """Normalize an LBT state with one target (Vega) into the page."""
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"Vega\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, threshold: 2.0,"
+            " weather: %s },"
+            " time_range: { start: %r, days: %r } }); 0"
+            % ("true" if weather else "false", start, days))
+
+    @staticmethod
+    def _astro_moon_crossings_s(day_start_ms, n_steps=288, step_s=300.0):
+        """First Moon horizon crossings within a day, from astropy.
+
+        The topocentric apparent Moon (get_body at the observer's
+        location, refraction zeroed because the page applies none)
+        is sampled at step_s seconds from the day's start, the
+        page's five-minute grid; each horizon sign change is refined
+        by linear interpolation between its bracketing samples.
+
+        Parameters
+        ----------
+        day_start_ms : int
+            Day start in UTC epoch ms.
+        n_steps : int, default 288
+            Number of step_s steps spanning the day.
+        step_s : float, default 300
+            Grid spacing in seconds.
+
+        Returns
+        -------
+        (rise_s, set_s, alts) : (float or None, float or None,
+        list of float)
+            First rise and first set as seconds from the day start
+            (None when absent), and the altitude samples in degrees.
+        """
+        loc = EarthLocation.from_geodetic(
+            LBT.lon * u.deg, LBT.lat * u.deg, LBT.elevation_m)
+        t0 = Time(day_start_ms / 1000.0, format="unix")
+        alts = []
+        for i in range(n_steps + 1):
+            t = t0 + i * step_s * u.s
+            aa = AltAz(obstime=t, location=loc)
+            aa.refraction = 0 * u.deg
+            alts.append(float(
+                SkyCoord(get_body("moon", t, loc)).transform_to(aa).alt.deg))
+        rise_s = None
+        set_s = None
+        for i in range(1, n_steps + 1):
+            a = alts[i - 1]
+            b = alts[i]
+            if a < 0.0 and b >= 0.0 and rise_s is None:
+                rise_s = (i - 1 + a / (a - b)) * step_s
+            elif a > 0.0 and b <= 0.0 and set_s is None:
+                set_s = (i - 1 + a / (a - b)) * step_s
+        return rise_s, set_s, alts
+
+    def test_moon_rise_set_matches_astropy(self):
+        """LBT local days 2026-11-25 through 28: page crossings agree
+        with astropy within five minutes.
+
+        Days are the local (America/Phoenix) days at 07:00 UTC
+        boundaries. Interior crossings (more than five minutes from
+        the day boundaries) are compared directly; with no interior
+        crossing and both endpoint altitudes more than 0.5 deg from
+        the horizon, the page's events and upAll/downAll flags must
+        match astropy's.
+        """
+        for day in range(25, 29):
+            day_start_ms = int(
+                datetime(2026, 11, day, 7, 0, tzinfo=timezone.utc)
+                .timestamp() * 1000)
+            rise_s, set_s, alts = self._astro_moon_crossings_s(day_start_ms)
+            n = len(alts) - 1
+            page = json.loads(self.js.evaljs(
+                "JSON.stringify(moonRiseSet(%r, %r, %r, %r, %r))"
+                % (day_start_ms, day_start_ms + n * 300 * 1000,
+                   LBT.lat, LBT.lon, LBT.elevation_m)))
+            edge_margin = min(abs(alts[0]), abs(alts[-1])) > 0.5
+            for kind, astro in (("rise", rise_s), ("set", set_s)):
+                if astro is not None and 300 < astro < n * 300 - 300:
+                    self.assertIsNotNone(
+                        page[kind], "day %d: page missed %s" % (day, kind))
+                    self.assertLessEqual(
+                        abs(page[kind] - (day_start_ms + astro * 1000)),
+                        5 * 60 * 1000, "day %d %s" % (day, kind))
+                elif astro is None and edge_margin:
+                    self.assertIsNone(
+                        page[kind], "day %d: phantom %s" % (day, kind))
+            if rise_s is None and set_s is None and edge_margin:
+                self.assertEqual(page["upAll"], alts[0] > 0.0)
+                self.assertEqual(page["downAll"], alts[0] < 0.0)
+
+    def test_summary_lists_moon_events_and_rain(self):
+        """The per-night list carries moonset/moonrise in local time
+        and the day's maximum hourly rain chance.
+
+        Local day 2026-11-26 at the LBT: near the 2026-11-24/25 full
+        Moon, the Moon's only crossing that day is a set in the
+        early morning (astropy cross-check). The weather cache is
+        seeded with a 30-minute grid at 50% cloud cover and
+        pp = (7 i) % 101, so the day's maximum rain chance is 99%.
+        """
+        interp = self._interp()
+        self._set_state(interp, "2026-11-26T00:00", 1, True)
+        day_start_ms = int(
+            datetime(2026, 11, 26, 7, 0, tzinfo=timezone.utc)
+            .timestamp() * 1000)
+        hours = [{"ms": day_start_ms + i * 1800000, "cc": 50.0,
+                  "pp": float((i * 7) % 101), "prec": None, "wc": None}
+                 for i in range(48)]
+        interp.evaljs("__wxCache = { key: 'seed', fetchedMs: 0,"
+                      " hours: %s }; 0" % json.dumps(hours))
+        data = json.loads(interp.evaljs("JSON.stringify(summaryData())"))
+        self.assertEqual(len(data["days"]), 1)
+        self.assertEqual(data["weather"][0]["clear"], 50.0)
+        self.assertEqual(data["weather"][0]["rain"], 99.0)
+        mo = data["moon"][0]
+        rise_s, set_s, alts = self._astro_moon_crossings_s(day_start_ms)
+        n = len(alts) - 1
+        edge_margin = min(abs(alts[0]), abs(alts[-1])) > 0.5
+        for kind, astro in (("rise", rise_s), ("set", set_s)):
+            if astro is not None and 300 < astro < n * 300 - 300:
+                self.assertIsNotNone(mo[kind])
+                self.assertLessEqual(
+                    abs(mo[kind] - (day_start_ms + astro * 1000)),
+                    5 * 60 * 1000)
+            elif astro is None and edge_margin:
+                self.assertIsNone(mo[kind])
+        interp.evaljs("renderSummary(); 0")
+        html = json.loads(interp.evaljs(
+            'JSON.stringify($("summary").innerHTML)'))
+        self.assertIn("rain 99%", html)
+        self.assertIn("50% clear", html)
+        if mo["set"] is not None:
+            dt = datetime.fromtimestamp(
+                mo["set"] / 1000.0, tz=timezone(timedelta(hours=-7)))
+            self.assertIn("moonset %02d:%02d" % (dt.hour, dt.minute), html)
+        if mo["rise"] is None:
+            self.assertNotIn("moonrise", html)
+
+    def test_summary_moon_without_weather(self):
+        """The per-night Moon events show with the Weather off too."""
+        interp = self._interp()
+        self._set_state(interp, "2026-11-26T00:00", 1, False)
+        data = json.loads(interp.evaljs("JSON.stringify(summaryData())"))
+        self.assertIsNone(data["weather"])
+        self.assertEqual(len(data["moon"]), 1)
+        self.assertIn("rise", data["moon"][0])
+        self.assertIn("set", data["moon"][0])
+        self.assertIn("upAll", data["moon"][0])
+        self.assertIn("downAll", data["moon"][0])
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
