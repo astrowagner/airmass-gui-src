@@ -429,6 +429,14 @@ function __makeEl(tag, id) {
     if (i >= 0) { this.children.splice(i, 1); child.parentElement = null; }
     return child;
   };
+  el.insertBefore = function (child, ref) {
+    if (child.parentElement) child.parentElement.removeChild(child);
+    var i = ref == null ? -1 : this.children.indexOf(ref);
+    if (i < 0) this.children.push(child);
+    else this.children.splice(i, 0, child);
+    child.parentElement = this;
+    return child;
+  };
   el.remove = function () { if (this.parentElement) this.parentElement.removeChild(this); };
   el.focus = function () {};
   el.select = function () {};
@@ -485,7 +493,20 @@ document = {
     if (!__els[id]) __els[id] = __makeEl("div", id);
     return __els[id];
   },
-  execCommand: function (cmd) { __execCmds.push(cmd); return true; }
+  execCommand: function (cmd) { __execCmds.push(cmd); return true; },
+  querySelectorAll: function (sel) {
+    var name = sel.charAt(0) === "." ? sel.slice(1) : sel;
+    var out = [];
+    (function walk(node) {
+      (node.children || []).forEach(function (c) {
+        var cls = String(c.className != null ? c.className
+                      : (c["class"] || ""));
+        if (cls.split(/\s+/).indexOf(name) >= 0) out.push(c);
+        if (c.children) walk(c);
+      });
+    })(document.body);
+    return out;
+  }
 };
 
 window = {

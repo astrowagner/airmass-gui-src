@@ -1256,19 +1256,52 @@ class CenterNowTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
-class TargetOrderTests(unittest.TestCase):
-    """Up/down arrows on the target rows reorder the targets.
+class PanelOrderTests(unittest.TestCase):
+    """The up/down arrows in a panel header reorder the panel window.
 
-    Each row's up/down arrow moves that target one row in the
-    target list; the first row's up arrow and the last row's
-    down arrow are disabled. The state's order is the source of
-    truth, so the observing windows (the summary), the CSV
-    export, and the chart legend follow the new order, and it
-    is saved with the state.
+    Each panel window's header carries a small up arrow and a small
+    down arrow at its right end; clicking one moves that panel one
+    visible slot in that direction within its column, the sidebar
+    panels among themselves and the panels of the main column among
+    themselves. Hidden panels are skipped, and the non-panel
+    siblings (the chart box, the sidebar strip) bound the columns,
+    so the arrows are disabled at the column ends. Showing or
+    hiding an optional panel refreshes the arrows on the next
+    redraw. The panel order is per-page only: it is not part of the
+    saved state. The clock is pinned to 2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
                        tzinfo=timezone.utc).timestamp() * 1000)
+
+    BUILD_TREE = """
+    (function () {
+      function prepPanel(id) {
+        var p = $(id);
+        p.className = "panel";
+        var h2 = document.createElement("h2");
+        h2.textContent = id;
+        p.appendChild(h2);
+        return p;
+      }
+      var sidebar = $("sidebar");
+      var ids = ["panel-observatory", "panel-time", "panel-display",
+                 "panel-targets", "panel-workspace"], i;
+      for (i = 0; i < ids.length; i++) sidebar.appendChild(prepPanel(ids[i]));
+      sidebar.appendChild($("sidebar-strip"));
+      var main = document.createElement("main");
+      main.className = "chart-col";
+      var chart = document.createElement("div");
+      chart.className = "chart-box";
+      main.appendChild(chart);
+      main.appendChild(prepPanel("finding-panel"));
+      main.appendChild(prepPanel("summary-panel"));
+      main.appendChild(prepPanel("wxreport-panel"));
+      main.appendChild(prepPanel("calendar-panel"));
+      document.body.appendChild(sidebar);
+      document.body.appendChild(main);
+      __mainCol = main;
+    })(); 0"""
 
     @classmethod
     def setUpClass(cls):
@@ -1302,140 +1335,169 @@ class TargetOrderTests(unittest.TestCase):
         interp.evaljs(self.script + ";" + chr(10) + "0")
         return interp
 
-    def _set_targets(self, interp):
-        """LBT state with three valid targets, TA, TB, TC in order."""
+    def _setup(self, interp):
+        """Pinned LBT state, the two column trees, and the arrows.
+
+        The stub body carries the page's two panel columns: the five
+        sidebar panels plus the sidebar strip, and the main column's
+        chart box plus its four panels, with the finding chart and
+        the weather report hidden as by default.
+        """
         interp.evaljs(
             "state = normalizeState({ observatory: {"
             " name: 'Mount Graham (LBT)', lat: 32.70131,"
             " lon: -109.88906, elevation_m: 3221.0,"
             " timezone: 'America/Phoenix',"
             " preset: 'Mount Graham (LBT)' },"
-            " objects: [ {\"name\": \"TA\", \"ra\": \"17:00:00\","
-            " \"dec\": \"+30:00:00\"},"
-            "            {\"name\": \"TB\", \"ra\": \"18:00:00\","
-            " \"dec\": \"+35:00:00\"},"
-            "            {\"name\": \"TC\", \"ra\": \"19:00:00\","
-            " \"dec\": \"+40:00:00\"} ],"
-            " options: { windows: true, threshold: 2.0 },"
+            " objects: [{\"name\": \"t\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, calendar: true, threshold: 2.0 },"
             " time_range: { start: '2026-11-25T00:00', days: 1 } });"
-            "renderTargets(); 0")
+            "syncAllControls(); 0")
+        interp.evaljs(self.BUILD_TREE)
+        interp.evaljs(
+            '$("summary-panel").style.display = "";'
+            '$("wxreport-panel").style.display = "none";'
+            '$("finding-panel").style.display = "none";'
+            '$("calendar-panel").style.display = ""; 0')
+        interp.evaljs("addPanelOrderButtons(); 0")
 
     @staticmethod
-    def _row_classes(interp):
-        """The class attribute of every control in every target row."""
+    def _orders(interp):
+        """The id (or class) of every child of both columns, in order."""
         return json.loads(interp.evaljs(
             "(function () {"
+            " return JSON.stringify({"
+            "  sidebar: $(\"sidebar\").children.map(function (c) {"
+            "    return c.id; }),"
+            "  main: __mainCol.children.map(function (c) {"
+            "    return c.id || c.className; }) }); })()"))
+
+    @staticmethod
+    def _arrows(interp, panel_id):
+        """The panel's header buttons: class, glyph, disabled flag."""
+        return json.loads(interp.evaljs(
+            "(function () {"
+            " var h2 = $(\"%s\").children[0];"
             " var out = [];"
-            " $(\"targets\").children.forEach(function (row) {"
-            "   out.push((row.children || [])"
-            "            .map(function (c) { return c[\"class\"] || \"\"; }));"
-            " });"
-            " return JSON.stringify(out); })()"))
+            " for (var i = 0; i < h2.children.length; i++)"
+            "   out.push({ cls: h2.children[i].className || \"\","
+            "              glyph: h2.children[i].textContent || \"\","
+            "              disabled: !!h2.children[i].disabled });"
+            " return JSON.stringify(out); })()" % panel_id))
 
-    @staticmethod
-    def _row_names(interp):
-        """The name input of every target row, in row order."""
-        return json.loads(interp.evaljs(
+    @classmethod
+    def _click_arrow(cls, interp, panel_id, which):
+        """Click the panel's up/down arrow; assert it exists."""
+        ok = interp.evaljs(
             "(function () {"
-            " var out = [];"
-            " $(\"targets\").children.forEach(function (row) {"
-            "   var c = row.children[1];"
-            "   out.push(c && \"value\" in c ? c.value : \"\");"
-            " });"
-            " return JSON.stringify(out); })()"))
+            " var h2 = $(\"%s\").children[0];"
+            " for (var i = 0; i < h2.children.length; i++)"
+            "   if (h2.children[i].className === \"%s\") {"
+            "     h2.children[i].click(); return true; }"
+            " return false; })()" % (panel_id, which))
+        assert ok is True, "no %s arrow on %s" % (which, panel_id)
 
-    @staticmethod
-    def _disabled(interp, row, cls):
-        """True when the arrow of class cls in the given row is disabled."""
-        return json.loads(interp.evaljs(
-            "(function () {"
-            " var row = $(\"targets\").children[%d];"
-            " for (var i = 0; i < row.children.length; i++)"
-            "   if (row.children[i][\"class\"] === \"%s\")"
-            "     return JSON.stringify(row.children[i].disabled);"
-            " return JSON.stringify(null); })()" % (row, cls)))
+    @classmethod
+    def _disabled(cls, interp, panel_id, which):
+        """Whether the panel's up/down arrow is disabled."""
+        for arrow in cls._arrows(interp, panel_id):
+            if arrow["cls"] == which:
+                return arrow["disabled"]
+        raise AssertionError("no %s arrow on %s" % (which, panel_id))
 
-    @staticmethod
-    def _click_arrow(interp, row, cls):
-        """Click the arrow button of class cls in the given row."""
-        got = interp.evaljs(
-            "(function () {"
-            " var row = $(\"targets\").children[%d];"
-            " for (var i = 0; i < row.children.length; i++)"
-            "   if (row.children[i][\"class\"] === \"%s\") {"
-            "     row.children[i].click(); return true; }"
-            " return false; })()" % (row, cls))
-        assert got is True, "arrow %s not found in row %d" % (cls, row)
+    def test_every_panel_header_gets_arrows(self):
+        """All nine panels get up/down arrows, disabled at the ends.
 
-    def test_rows_have_up_down_arrows_with_ends_disabled(self):
-        """Each row has ten controls; the arrows are disabled at the ends."""
-        interp = self._interp()
-        self._set_targets(interp)
-        want = ["", "", "", "", "", "info", "sb", "mu", "md", "rm"]
-        for row in self._row_classes(interp):
-            self.assertEqual(row, want)
-        self.assertTrue(self._disabled(interp, 0, "mu"))
-        self.assertFalse(self._disabled(interp, 1, "mu"))
-        self.assertFalse(self._disabled(interp, 1, "md"))
-        self.assertTrue(self._disabled(interp, 2, "md"))
-
-    def test_up_arrow_moves_target_up(self):
-        """The middle row's up arrow swaps it with the row above.
-
-        The new order is the state's order, so the row values and
-        the saved state (localStorage) carry it, and the re-render
-        disables the arrows at the new ends.
+        The sidebar column ends at the sidebar strip, the main
+        column starts at the chart box, and the finding chart and
+        the weather report are hidden, so the arrows with no
+        visible neighbor in that direction are disabled.
         """
         interp = self._interp()
-        self._set_targets(interp)
-        self._click_arrow(interp, 1, "mu")
-        want = ["TB", "TA", "TC"]
-        self.assertEqual(interp.evaljs(
-            "state.objects.map(function (o) { return o.name; })"), want)
-        self.assertEqual(self._row_names(interp), want)
-        saved = json.loads(interp.evaljs(
-            "localStorage.getItem(\"airmass-gui-site-state\")"))
-        self.assertEqual([o["name"] for o in saved["objects"]], want)
-        self.assertTrue(self._disabled(interp, 0, "mu"))
-        self.assertTrue(self._disabled(interp, 2, "md"))
-        self.assertFalse(self._disabled(interp, 1, "mu"))
-        self.assertFalse(self._disabled(interp, 1, "md"))
+        self._setup(interp)
+        panels = ["panel-observatory", "panel-time", "panel-display",
+                  "panel-targets", "panel-workspace", "finding-panel",
+                  "summary-panel", "wxreport-panel", "calendar-panel"]
+        for panel in panels:
+            arrows = self._arrows(interp, panel)
+            self.assertEqual([a["cls"] for a in arrows], ["pu", "pd"])
+            self.assertEqual(arrows[0]["glyph"], "\u25b2")
+            self.assertEqual(arrows[1]["glyph"], "\u25bc")
+        self.assertTrue(self._disabled(interp, "panel-observatory", "pu"))
+        self.assertFalse(self._disabled(interp, "panel-observatory", "pd"))
+        self.assertFalse(self._disabled(interp, "panel-workspace", "pu"))
+        self.assertTrue(self._disabled(interp, "panel-workspace", "pd"))
+        self.assertTrue(self._disabled(interp, "summary-panel", "pu"))
+        self.assertTrue(self._disabled(interp, "calendar-panel", "pd"))
+        orders = self._orders(interp)
+        self.assertEqual(orders["sidebar"][-1], "sidebar-strip")
+        self.assertEqual(orders["main"][0], "chart-box")
 
-    def test_down_arrow_moves_target_down(self):
-        """The first row's down arrow swaps it with the row below."""
-        interp = self._interp()
-        self._set_targets(interp)
-        self._click_arrow(interp, 0, "md")
-        want = ["TB", "TA", "TC"]
-        self.assertEqual(interp.evaljs(
-            "state.objects.map(function (o) { return o.name; })"), want)
-        self.assertEqual(self._row_names(interp), want)
-        saved = json.loads(interp.evaljs(
-            "localStorage.getItem(\"airmass-gui-site-state\")"))
-        self.assertEqual([o["name"] for o in saved["objects"]], want)
-        self.assertTrue(self._disabled(interp, 0, "mu"))
-        self.assertTrue(self._disabled(interp, 2, "md"))
+    def test_down_arrow_swaps_with_next_visible_panel(self):
+        """The sidebar's down arrow moves a panel below the next one.
 
-    def test_summary_and_csv_follow_order(self):
-        """The summary's windows and the CSV export list the targets in
-        the state's order after a reorder."""
+        Moving the observatory panel down swaps it with the time
+        panel; the arrows are refreshed at the new ends, and the
+        up arrow moves the panel back to its original slot.
+        """
         interp = self._interp()
-        self._set_targets(interp)
-        self._click_arrow(interp, 0, "md")
-        interp.evaljs("renderSummary(); 0")
-        html = interp.evaljs('$("summary").innerHTML')
-        i_tb = html.index("<b>TB</b>")
-        i_ta = html.index("<b>TA</b>")
-        i_tc = html.index("<b>TC</b>")
-        self.assertLess(i_tb, i_ta)
-        self.assertLess(i_ta, i_tc)
-        csv = interp.evaljs("windowsCsv()")
-        order = []
-        for line in csv.split("\n")[1:]:
-            target = line.split(",")[1]
-            if target not in order:
-                order.append(target)
-        self.assertEqual(order, ["TB", "TA", "TC"])
+        self._setup(interp)
+        self._click_arrow(interp, "panel-observatory", "pd")
+        orders = self._orders(interp)
+        self.assertEqual(orders["sidebar"][:2],
+                         ["panel-time", "panel-observatory"])
+        self.assertTrue(self._disabled(interp, "panel-time", "pu"))
+        self.assertFalse(self._disabled(interp, "panel-observatory", "pd"))
+        self._click_arrow(interp, "panel-observatory", "pu")
+        orders = self._orders(interp)
+        self.assertEqual(orders["sidebar"][:3],
+                         ["panel-observatory", "panel-time",
+                          "panel-display"])
+        self.assertTrue(self._disabled(interp, "panel-observatory", "pu"))
+
+    def test_up_arrow_skips_hidden_panels(self):
+        """The main column's up arrow skips the hidden panels.
+
+        The calendar's up arrow jumps over the hidden weather
+        report to swap with the summary; above the calendar there
+        is only the hidden finding chart and the chart box, so its
+        up arrow is disabled, and so is the summary's down arrow
+        over the hidden weather report.
+        """
+        interp = self._interp()
+        self._setup(interp)
+        self._click_arrow(interp, "calendar-panel", "pu")
+        orders = self._orders(interp)
+        self.assertEqual(orders["main"],
+                         ["chart-box", "finding-panel", "calendar-panel",
+                          "summary-panel", "wxreport-panel"])
+        self.assertTrue(self._disabled(interp, "calendar-panel", "pu"))
+        self.assertFalse(self._disabled(interp, "summary-panel", "pu"))
+        self.assertTrue(self._disabled(interp, "summary-panel", "pd"))
+
+    def test_showing_a_panel_refreshes_the_arrows(self):
+        """Turning the weather report on re-enables the arrows above it.
+
+        The checkbox shows the panel on the next redraw, which
+        refreshes the arrows; the summary's up arrow then swaps it
+        past the calendar back to its original slot.
+        """
+        interp = self._interp()
+        self._setup(interp)
+        self._click_arrow(interp, "calendar-panel", "pu")
+        interp.evaljs(
+            '$("wxreport-chk").checked = true;'
+            '$("wxreport-chk").dispatchEvent({ type: "change" }); 0')
+        interp.evaljs("flushTimers(); 0")
+        self.assertEqual(interp.evaljs(
+            '$("wxreport-panel").style.display'), "")
+        self.assertFalse(self._disabled(interp, "summary-panel", "pu"))
+        self._click_arrow(interp, "summary-panel", "pu")
+        orders = self._orders(interp)
+        self.assertEqual(orders["main"],
+                         ["chart-box", "finding-panel", "summary-panel",
+                          "calendar-panel", "wxreport-panel"])
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
