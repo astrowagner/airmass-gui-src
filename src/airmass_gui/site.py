@@ -491,7 +491,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Windows: the dashed line marks your airmass threshold; shaded bands show when each target is usable, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold, the Moon's phase (illumination and name) at mid-night, that night's Moon rise and set in local time (or a note that the Moon stays up or down for the whole day's part), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
 <li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
 <li>Weather (hidden by default; enable it with the Weather checkbox in the Display panel): the cloud band fills the plot with the hourly cloud cover; a rain drop along the top marks hours with precipitation or at least a 40% rain chance and a lightning bolt marks thunderstorm hours (WMO weather codes 95/96/99); each per-night list adds the day's maximum hourly rain chance and the average clear-sky fraction. The forecast runs from about 16 days back to about 15 days ahead (needs internet).</li>
-<li>Weather report (hidden by default; enable it with the Weather report checkbox in the Display panel): the current conditions at the observatory, then one row per day for eight days \u2014 condition, min and max temperature, maximum rain chance, mean cloud cover, maximum wind, and the Moon's illumination at the day's closing midnight \u2014 with links to the underlying weather services (needs internet; fetched from open-meteo and cached for one hour).</li>
+<li>Weather report (hidden by default; enable it with the Weather report checkbox in the Display panel): the current conditions at the observatory, then one row per day for eight days \u2014 condition and its display symbol, min and max temperature, maximum rain chance, mean cloud cover, maximum wind, and the Moon's illumination at the day's closing midnight \u2014 with links to the underlying weather services, including the Meteoblue meteogram for the site's coordinates (needs internet; fetched from open-meteo and cached for one hour; the links open in new tabs).</li>
 <li>Moon symbols: a glyph at each local midnight shows the Moon&rsquo;s phase, with its illumination in percent beside it; always shown, independent of the Moon curve.</li>
 <li>Targets: with Extra info checked, a Target details window under the rows shows each target's full Simbad record (magnitudes in all bands, spectral type, parallax with its uncertainty and the inverted distance, proper motion, radial velocity, and identifiers); a row's status text shows the stored ephemeris point count, and clicking its cross clears the record and ephemeris.</li>
 <li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart and the image are both centered on the target&rsquo;s J2000 position, so the two agree; hovering the star chart shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name, angular offset from the cursor, and a detail table (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts); a second Simbad lookup by name adds the object's parallax with uncertainty, distance, proper motion, radial velocity, and identifiers to the table (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure); the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 5&deg;, with the current radius shown beside it, and the chart re-scales live as the slider moves.</li>
@@ -1715,6 +1715,40 @@ var WMO_TEXT = {
 function wmoText(code) {
   if (code == null) return "Unknown";
   return WMO_TEXT[code] != null ? WMO_TEXT[code] : "Code " + code;
+}
+
+/**
+ * WMO weather interpretation codes to display glyphs, paired with
+ * WMO_TEXT in the Weather report.
+ *
+ * @type {Object<number, string>}
+ */
+var WMO_ICON = {
+  0: "\u2600", 1: "\ud83c\udf24", 2: "\u26c5", 3: "\u2601",
+  45: "\ud83c\udf2b", 48: "\ud83c\udf2b", 51: "\ud83c\udf26",
+  53: "\ud83c\udf26", 55: "\ud83c\udf26", 56: "\ud83c\udf27",
+  57: "\ud83c\udf27", 61: "\ud83c\udf27", 63: "\ud83c\udf27",
+  65: "\ud83c\udf27", 66: "\ud83c\udf27", 67: "\ud83c\udf27",
+  71: "\ud83c\udf28", 73: "\ud83c\udf28", 75: "\ud83c\udf28",
+  77: "\ud83c\udf28", 80: "\ud83c\udf27", 81: "\ud83c\udf27",
+  82: "\ud83c\udf27", 85: "\ud83c\udf28", 86: "\ud83c\udf28",
+  95: "\u26c8", 96: "\u26c8", 99: "\u26c8"
+};
+
+/**
+ * Display glyph for a WMO weather interpretation code.
+ *
+ * The glyph is the symbol the Weather report shows beside a
+ * condition; the mapping is a display choice, while the codes are
+ * open-meteo's WMO weather interpretation codes.
+ *
+ * @param {?number} code - WMO weather code, or null when absent.
+ * @returns {string} The code's glyph, or "" for null or a code
+ *     without one.
+ */
+function wmoIcon(code) {
+  if (code == null) return "";
+  return WMO_ICON[code] != null ? WMO_ICON[code] : "";
 }
 
 /**
@@ -3731,8 +3765,9 @@ function renderSummary() {
  * one table row per forecast day (condition, min and max
  * temperature in Celsius, maximum rain chance, mean cloud cover,
  * maximum wind, and the Moon's illumination in percent at the
- * day's closing local midnight), and links to the underlying
- * weather services. With no cached reply the panel shows a loading
+ * day's closing local midnight), each condition shown with its
+ * display symbol, and links to the underlying weather services,
+ * including the Meteoblue meteogram for the site's coordinates. With no cached reply the panel shows a loading
  * note; after a failed fetch it shows the error instead of data.
  * Every value from the reply reaches the page only through DOM
  * calls (textContent and properties), never through markup strings.
@@ -3774,7 +3809,11 @@ function renderWxReport() {
   if (c.cloud_cover != null) parts.push("cloud " + c.cloud_cover + "%");
   if (c.precipitation_probability != null)
     parts.push("rain " + c.precipitation_probability + "%");
-  if (c.weather_code != null) parts.push(wmoText(c.weather_code));
+  if (c.weather_code != null) {
+    var cicon = wmoIcon(c.weather_code);
+    parts.push(cicon ? cicon + " " + wmoText(c.weather_code)
+                     : wmoText(c.weather_code));
+  }
   cur.textContent = parts.length ? "Now: " + parts.join(", ") : "Now: no data";
   box.appendChild(cur);
   var d = body.daily;
@@ -3798,8 +3837,12 @@ function renderWxReport() {
     if (!m) continue;
     var tr = document.createElement("tr");
     var cells = [
-      MONTHS[+m[2] - 1] + " " + (+m[3]),
-      wmoText(d.weather_code ? d.weather_code[i] : null),
+      MONTHS[+m[2] - 1] + " " + m[3],
+      (function () {
+        var wc = d.weather_code ? d.weather_code[i] : null;
+        var icon = wmoIcon(wc);
+        return icon ? icon + " " + wmoText(wc) : wmoText(wc);
+      })(),
       d.temperature_2m_min != null && d.temperature_2m_min[i] != null
           ? d.temperature_2m_min[i].toFixed(1) + " \u00b0C" : "",
       d.temperature_2m_max != null && d.temperature_2m_max[i] != null
@@ -3836,7 +3879,9 @@ function renderWxReport() {
   [["https://open-meteo.com/", "open-meteo.com"],
    ["https://www.windy.com/", "windy.com"],
    ["https://www.weather.gov/", "weather.gov"],
-   ["https://www.wunderground.com/", "wunderground.com"]]
+   ["https://www.wunderground.com/", "wunderground.com"],
+   ["https://www.meteoblue.com/en/weather/forecast?latitude=" +
+    obs.lat + "&longitude=" + obs.lon, "meteoblue.com"]]
   .forEach(function (pair, k) {
     if (k > 0) {
       var sep = document.createElement("span");

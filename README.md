@@ -62,8 +62,9 @@ the network only for the optional live services: open-meteo weather (the
 hourly overlay when the Weather checkbox is on, and the daily Weather
 report panel when the Weather report checkbox is on), CDS Simbad name
 lookups and finding-chart
-object queries, and the SkyView quick-query link, which the user opens in
-a new tab. The chart, calendar, and summary work offline. Open the page
+object queries, plus links the user opens in new tabs (the SkyView
+quick-query page and the weather services behind the Weather report).
+The chart, calendar, and summary work offline. Open the page
 directly in a browser or drop the file into a GitHub Pages repository.
 
 The page is fully interactive: edit the observatory (preset or custom

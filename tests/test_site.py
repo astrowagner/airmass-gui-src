@@ -56,7 +56,7 @@ CORE_FUNCTIONS = [
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
     "skyViewPosition", "skyViewQueryUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
-    "weatherSymbolKind", "wmoText",
+    "weatherSymbolKind", "wmoText", "wmoIcon",
     "blendHex",
 ]
 
@@ -1836,7 +1836,8 @@ class WxReportTests(unittest.TestCase):
     current-conditions line, one row per day (condition, min and
     max temperature, maximum rain chance, mean cloud cover, maximum
     wind, and the Moon's illumination at the day's closing local
-    midnight), and links to the underlying weather services. The
+    midnight), and links to the underlying weather services, including the
+Meteoblue meteogram for the site's coordinates. The
     reply is cached per observatory and reused for one hour.
 
     The render test uses the reply recorded 2026-11-25 from
@@ -1864,6 +1865,16 @@ class WxReportTests(unittest.TestCase):
         "wind_speed_10m_max,weather_code"
         "&timezone=America%2FPhoenix"
         "&start_date=2026-11-25&end_date=2026-12-02")
+    WMO_ICON = {0: "\u2600", 1: "\U0001F324", 2: "\u26c5",
+               3: "\u2601", 45: "\U0001F32b", 48: "\U0001F32b",
+               51: "\U0001F326", 53: "\U0001F326", 55: "\U0001F326",
+               56: "\U0001F327", 57: "\U0001F327", 61: "\U0001F327",
+               63: "\U0001F327", 65: "\U0001F327", 66: "\U0001F327",
+               67: "\U0001F327", 71: "\U0001F328", 73: "\U0001F328",
+               75: "\U0001F328", 77: "\U0001F328", 80: "\U0001F327",
+               81: "\U0001F327", 82: "\U0001F327", 85: "\U0001F328",
+               86: "\U0001F328", 95: "\u26c8", 96: "\u26c8",
+               99: "\u26c8"}
     WMO = {0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy",
            3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle",
            53: "Drizzle", 55: "Drizzle", 56: "Freezing drizzle",
@@ -1930,6 +1941,7 @@ class WxReportTests(unittest.TestCase):
         Sun-Moon-Earth phase angle; the Sun and Moon geocentric
         positions come from get_sun and get_body.
         """
+        t = Time(t)
         geoc = EarthLocation(0 * u.m, 0 * u.m, 0 * u.m)
         moon = get_body("moon", t, location=geoc).cartesian
         sun = get_sun(t).cartesian
@@ -1952,6 +1964,22 @@ class WxReportTests(unittest.TestCase):
         self._set_state(interp, True)
         url = interp.evaljs("wxDailyRequest(state.observatory).url")
         self.assertEqual(url, self.EXPECTED_URL)
+
+    def test_wmo_icon(self):
+        """wmoIcon maps WMO codes to their display glyphs.
+
+        Codes without a glyph, and null, give an empty string so the
+        condition cell degrades to text only.
+        """
+        interp = self._interp()
+        checks = {0: "\u2600", 1: "\U0001F324", 2: "\u26c5",
+                  3: "\u2601", 45: "\U0001F32b", 51: "\U0001F326",
+                  61: "\U0001F327", 71: "\U0001F328", 95: "\u26c8",
+                  99: "\u26c8"}
+        for code, icon in checks.items():
+            self.assertEqual(interp.evaljs("wmoIcon(%d)" % code), icon)
+        self.assertEqual(interp.evaljs("wmoIcon(null)"), "")
+        self.assertEqual(interp.evaljs("wmoIcon(123)"), "")
 
     def test_report_hidden_by_default(self):
         """The panel is off by default and hidden after a sync."""
@@ -2014,7 +2042,9 @@ class WxReportTests(unittest.TestCase):
             y, mo, dd = day.split("-")
             row = rows[1 + i]
             self.assertEqual(row[0], self.MONTHS[int(mo) - 1] + " " + dd)
-            self.assertEqual(row[1], self.WMO[d["weather_code"][i]])
+            self.assertEqual(row[1],
+                             self.WMO_ICON[d["weather_code"][i]] + " " +
+                             self.WMO[d["weather_code"][i]])
             self.assertEqual(row[2],
                              "%.1f \u00b0C" % d["temperature_2m_min"][i])
             self.assertEqual(row[3],
@@ -2024,13 +2054,15 @@ class WxReportTests(unittest.TestCase):
             self.assertEqual(row[5], "%d%%" % d["cloudcover_mean"][i])
             self.assertEqual(row[6],
                              "%.1f km/h" % d["wind_speed_10m_max"][i])
-            closing = datetime(int(y), int(mo), int(dd) + 1, 7, 0,
-                               tzinfo=timezone.utc)
+            closing = datetime(int(y), int(mo), int(dd), 7, 0,
+                               tzinfo=timezone.utc) + timedelta(days=1)
             self.assertEqual(int(row[7].rstrip("%")),
                              int(round(self._moon_illum(closing) * 100)))
         self.assertEqual(report["links"], [
             "https://open-meteo.com/", "https://www.windy.com/",
-            "https://www.weather.gov/", "https://www.wunderground.com/"])
+            "https://www.weather.gov/", "https://www.wunderground.com/",
+            "https://www.meteoblue.com/en/weather/forecast"
+            "?latitude=32.70131&longitude=-109.88906"])
 
     def test_refresh_fetches_once_then_reuses(self):
         """wxReportRefresh fetches once and serves later calls from cache.
