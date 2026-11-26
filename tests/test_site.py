@@ -56,7 +56,7 @@ CORE_FUNCTIONS = [
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
     "skyViewPosition", "skyViewQueryUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
-    "weatherSymbolKind",
+    "weatherSymbolKind", "wmoText",
     "blendHex",
 ]
 
@@ -1822,6 +1822,259 @@ class MoonRiseSetTests(unittest.TestCase):
         self.assertIn("set", data["moon"][0])
         self.assertIn("upAll", data["moon"][0])
         self.assertIn("downAll", data["moon"][0])
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class WxReportTests(unittest.TestCase):
+    """The Weather report panel shows the current conditions and
+    eight-day outlook for the observatory.
+
+    The checkbox in the Display panel is off by default. When on,
+    the page asks open-meteo's forecast API for the current
+    conditions and a daily forecast covering the observatory's
+    local today through seven days out, and renders a
+    current-conditions line, one row per day (condition, min and
+    max temperature, maximum rain chance, mean cloud cover, maximum
+    wind, and the Moon's illumination at the day's closing local
+    midnight), and links to the underlying weather services. The
+    reply is cached per observatory and reused for one hour.
+
+    The render test uses the reply recorded 2026-11-25 from
+    https://api.open-meteo.com/v1/forecast?latitude=32.70131
+    &longitude=-109.88906&current=temperature_2m,wind_speed_10m,
+    cloud_cover,precipitation_probability,weather_code&daily=
+    temperature_2m_max,temperature_2m_min,precipitation_
+    probability_max,cloudcover_mean,wind_speed_10m_max,weather_code
+    &timezone=America/Phoenix&start_date=2026-11-25&end_date=
+    2026-12-02, saved unedited in
+    tests/fixtures/open_meteo_daily_20261125.json and seeded
+    directly into the report cache, so no network is needed.
+    """
+
+    NOW = int(datetime(2026, 11, 25, 19, 0,
+                       tzinfo=timezone.utc).timestamp() * 1000)
+    FIXTURE = ROOT / "tests" / "fixtures" / "open_meteo_daily_20261125.json"
+    EXPECTED_URL = (
+        "https://api.open-meteo.com/v1/forecast"
+        "?latitude=32.70131&longitude=-109.88906"
+        "&current=temperature_2m,wind_speed_10m,cloud_cover,"
+        "precipitation_probability,weather_code"
+        "&daily=temperature_2m_max,temperature_2m_min,"
+        "precipitation_probability_max,cloudcover_mean,"
+        "wind_speed_10m_max,weather_code"
+        "&timezone=America%2FPhoenix"
+        "&start_date=2026-11-25&end_date=2026-12-02")
+    WMO = {0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy",
+           3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle",
+           53: "Drizzle", 55: "Drizzle", 56: "Freezing drizzle",
+           57: "Freezing drizzle", 61: "Rain", 63: "Rain", 65: "Rain",
+           66: "Freezing rain", 67: "Freezing rain", 71: "Snow",
+           73: "Snow", 75: "Snow", 77: "Snow", 80: "Rain showers",
+           81: "Rain showers", 82: "Rain showers", 85: "Snow showers",
+           86: "Snow showers", 95: "Thunderstorm",
+           96: "Thunderstorm with hail", 99: "Thunderstorm with hail"}
+    MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+        cls.body = json.loads(cls.FIXTURE.read_text(encoding="utf-8"))
+
+    def _interp(self):
+        """Page interpreter with the clock pinned at self.NOW."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs("Date.now = function () { return %d; }; 0"
+                      % self.NOW)
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _set_state(self, interp, wx_report):
+        """Normalize an LBT state with the report option set."""
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [],"
+            " options: { wxReport: %s },"
+            " time_range: { start: '2026-11-25T00:00', days: 1 } }); 0"
+            % ("true" if wx_report else "false"))
+
+    @staticmethod
+    def _moon_illum(t):
+        """Illuminated fraction of the Moon at t from astropy.
+
+        The fraction is (1 + cos phi)/2 where phi is the
+        Sun-Moon-Earth phase angle; the Sun and Moon geocentric
+        positions come from get_sun and get_body.
+        """
+        geoc = EarthLocation(0 * u.m, 0 * u.m, 0 * u.m)
+        moon = get_body("moon", t, location=geoc).cartesian
+        sun = get_sun(t).cartesian
+        to_sun = sun - moon
+        to_earth = -moon
+        cos_phi = float(np.dot(to_sun.xyz.value, to_earth.xyz.value)
+                        / (np.linalg.norm(to_sun.xyz.value)
+                           * np.linalg.norm(to_earth.xyz.value)))
+        return (1.0 + cos_phi) / 2.0
+
+    def test_daily_request_url(self):
+        """The request targets the daily API for eight local days.
+
+        With the clock pinned at 2026-11-25T19:00Z (local noon of
+        Nov 25 at the LBT), the range is 2026-11-25 through
+        2026-12-02 and the time zone is percent-encoded, as in
+        weatherRequest.
+        """
+        interp = self._interp()
+        self._set_state(interp, True)
+        url = interp.evaljs("wxDailyRequest(state.observatory).url")
+        self.assertEqual(url, self.EXPECTED_URL)
+
+    def test_report_hidden_by_default(self):
+        """The panel is off by default and hidden after a sync."""
+        interp = self._interp()
+        self._set_state(interp, False)
+        self.assertEqual(interp.evaljs("state.options.wxReport"), False)
+        interp.evaljs("syncAllControls(); 0")
+        self.assertEqual(interp.evaljs(
+            '$("wxreport-panel").style.display'), "none")
+        self.assertFalse(interp.evaljs('$("wxreport-chk").checked'))
+
+    def test_report_renders_recorded_reply(self):
+        """The panel shows the recorded reply's values, DOM-built.
+
+        The report cache is seeded with the unedited 2026-11-25
+        reply; the current line and every day's row are checked
+        against the fixture, the Moon column against astropy's
+        phase, and the footer links are checked one by one.
+        """
+        interp = self._interp()
+        self._set_state(interp, True)
+        interp.evaljs("__wxReportCache = { key: 'seed', fetchedMs: %d,"
+                      " body: %s }; 0" % (self.NOW, json.dumps(self.body)))
+        interp.evaljs("renderWxReport(); 0")
+        self.assertEqual(interp.evaljs(
+            '$("wxreport-panel").style.display'), "")
+        report = json.loads(interp.evaljs("""(function () {
+          var out = { rows: [], links: [], text: "" };
+          var walk = function (el) {
+            if (el.textContent) out.text += el.textContent + " ";
+            if (el.tagName === "TR")
+              out.rows.push((el.children || []).map(function (c) {
+                return c.textContent; }));
+            if (el.tagName === "A")
+              out.links.push(String(el.href || ""));
+            (el.children || []).forEach(walk);
+          };
+          walk($("wxreport"));
+          return JSON.stringify(out);
+        })()"""))
+        rows = report["rows"]
+        self.assertEqual(rows[0], ["Date", "Condition", "Tmin", "Tmax",
+                                   "Rain %", "Cloud %", "Wind max",
+                                   "Moon %"])
+        self.assertEqual(len(rows), 9)
+        cur = self.body["current"]
+        self.assertIn("Now:", report["text"])
+        c = cur["temperature_2m"]
+        self.assertIn("%s \u00b0C (%s \u00b0F)" % ("%.1f" % c,
+                                                  "%.1f" % (c * 9 / 5 + 32)),
+                      report["text"])
+        self.assertIn("wind %s km/h" % ("%.1f" % cur["wind_speed_10m"]),
+                      report["text"])
+        self.assertIn("cloud %d%%" % cur["cloud_cover"], report["text"])
+        self.assertIn("rain %d%%" % cur["precipitation_probability"],
+                      report["text"])
+        self.assertIn(self.WMO[cur["weather_code"]], report["text"])
+        d = self.body["daily"]
+        for i, day in enumerate(d["time"]):
+            y, mo, dd = day.split("-")
+            row = rows[1 + i]
+            self.assertEqual(row[0], self.MONTHS[int(mo) - 1] + " " + dd)
+            self.assertEqual(row[1], self.WMO[d["weather_code"][i]])
+            self.assertEqual(row[2],
+                             "%.1f \u00b0C" % d["temperature_2m_min"][i])
+            self.assertEqual(row[3],
+                             "%.1f \u00b0C" % d["temperature_2m_max"][i])
+            self.assertEqual(row[4],
+                             "%d%%" % d["precipitation_probability_max"][i])
+            self.assertEqual(row[5], "%d%%" % d["cloudcover_mean"][i])
+            self.assertEqual(row[6],
+                             "%.1f km/h" % d["wind_speed_10m_max"][i])
+            closing = datetime(int(y), int(mo), int(dd) + 1, 7, 0,
+                               tzinfo=timezone.utc)
+            self.assertEqual(int(row[7].rstrip("%")),
+                             int(round(self._moon_illum(closing) * 100)))
+        self.assertEqual(report["links"], [
+            "https://open-meteo.com/", "https://www.windy.com/",
+            "https://www.weather.gov/", "https://www.wunderground.com/"])
+
+    def test_refresh_fetches_once_then_reuses(self):
+        """wxReportRefresh fetches once and serves later calls from cache.
+
+        The stub fetch is replaced with a counter that returns the
+        recorded reply in the live shape; two refreshes in a row
+        issue one request for the exact daily URL, and the panel is
+        rendered from the cache.
+        """
+        interp = self._interp()
+        self._set_state(interp, True)
+        interp.evaljs("var __wxrepBody = " + json.dumps(self.body) + "; 0")
+        interp.evaljs("""
+          var __wxrepFetches = [];
+          fetch = function (url, opts) {
+            __wxrepFetches.push(String(url));
+            return Promise.resolve({
+              ok: true, status: 200,
+              text: function () {
+                return Promise.resolve(JSON.stringify(__wxrepBody)); }
+            });
+          };
+          0""")
+        interp.evaljs("wxReportRefresh(); 0")
+        interp.evaljs("Promise.resolve(); 0")
+        self.assertEqual(json.loads(
+            interp.evaljs("JSON.stringify(__wxrepFetches)")),
+            [self.EXPECTED_URL])
+        interp.evaljs("wxReportRefresh(); 0")
+        interp.evaljs("Promise.resolve(); 0")
+        self.assertEqual(json.loads(
+            interp.evaljs("JSON.stringify(__wxrepFetches)")),
+            [self.EXPECTED_URL])
+        text = json.loads(interp.evaljs("""(function () {
+          var out = "";
+          var walk = function (el) {
+            out += el.textContent || "";
+            (el.children || []).forEach(walk);
+          };
+          walk($("wxreport"));
+          return JSON.stringify(out);
+        })()"""))
+        self.assertIn("Now:", text)
+
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
