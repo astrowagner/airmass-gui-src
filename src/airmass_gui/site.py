@@ -191,9 +191,9 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--button-hover); }
-.target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px auto auto 22px;
+.target-row { display: grid; grid-template-columns: 30px 1fr 1fr 1fr 44px auto auto 22px 22px 22px;
               gap: 0.3rem; margin: 0.25rem 0; align-items: center; }
-#targets.extra .target-row { grid-template-columns: 30px 1fr 1fr 1fr 44px 1fr auto auto 22px; }
+#targets.extra .target-row { grid-template-columns: 30px 1fr 1fr 1fr 44px 1fr auto auto 22px 22px 22px; }
 #targets:not(.extra) .target-row .info { display: none; }
 .target-row .info { font-size: 0.75rem; color: var(--fg-dim); cursor: pointer;
                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -201,6 +201,12 @@ button:hover { background: var(--button-hover); }
 .target-row .rm { border: none; background: transparent; color: var(--fg-dim);
                   font-size: 1.05rem; padding: 0; }
 .target-row .rm:hover { color: var(--error); }
+.target-row .mu, .target-row .md { border: none; background: transparent;
+                  color: var(--fg-dim); font-size: 0.65rem; padding: 0;
+                  cursor: pointer; }
+.target-row .mu:hover, .target-row .md:hover { color: var(--fg); }
+.target-row .mu:disabled, .target-row .md:disabled { opacity: 0.4;
+                  cursor: default; }
 .add-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto auto;
            gap: 0.3rem; margin-top: 0.35rem; }
 .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -468,7 +474,7 @@ footer li { margin-bottom: 0.2rem; }
 <li><b>Observatory</b>: pick a preset or enter latitude, longitude, and elevation; the time zone dropdown lists common zones (the current zone is preselected).</li>
 <li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night; the 1 / 2 / 3 buttons set the duration to one, two, or three days; the Night of dropdown jumps the range to any local night from yesterday through two weeks ahead (each entry gives the night's best target altitude and the Moon's illumination at its closing midnight).</li>
 <li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold, the shaded usable bands, and the per-night list; Moon, the twilight overlays, Weather, Weather report, and Extra info toggle their features.</li>
-<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
+<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), &#9650;/&#9660; move the row up/down in the list (the observing windows, the CSV export, and the chart legend follow the new order), and &#215; removes it.</li>
 <li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; the &#9678; button expands the time range until the current time sits exactly at its center, mirroring the longer of the before-now and after-now portions onto the shorter side; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
 <li><b>Observing windows</b>: per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, the Moon's phase at mid-night and its rise and set that night (or whether it stays up or down all night), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
 <li><b>Annual calendar</b>: twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
@@ -493,7 +499,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Weather (hidden by default; enable it with the Weather checkbox in the Display panel): the cloud band fills the plot with the hourly cloud cover; a rain drop along the top marks hours with precipitation or at least a 40% rain chance and a lightning bolt marks thunderstorm hours (WMO weather codes 95/96/99); each per-night list adds the day's maximum hourly rain chance and the average clear-sky fraction. The forecast runs from about 16 days back to about 15 days ahead (needs internet).</li>
 <li>Weather report (hidden by default; enable it with the Weather report checkbox in the Display panel): the current conditions at the observatory, then one row per day for eight days \u2014 condition and its display symbol, min and max temperature, maximum rain chance, mean cloud cover, maximum wind, and the Moon's illumination at the day's closing midnight \u2014 with links to the underlying weather services, including the Meteoblue meteogram for the site's coordinates (needs internet; fetched from open-meteo and cached for one hour; the links open in new tabs).</li>
 <li>Moon symbols: a glyph at each local midnight shows the Moon&rsquo;s phase, with its illumination in percent beside it; always shown, independent of the Moon curve.</li>
-<li>Targets: with Extra info checked, a Target details window under the rows shows each target's full Simbad record (magnitudes in all bands, spectral type, parallax with its uncertainty and the inverted distance, proper motion, radial velocity, and identifiers); a row's status text shows the stored ephemeris point count, and clicking its cross clears the record and ephemeris.</li>
+<li>Targets: with Extra info checked, a Target details window under the rows shows each target's full Simbad record (magnitudes in all bands, spectral type, parallax with its uncertainty and the inverted distance, proper motion, radial velocity, and identifiers); a row's status text shows the stored ephemeris point count, clicking its cross clears the record and ephemeris, and its &#9650;/&#9660; arrows move it up or down the list &mdash; the summary's observing windows, the CSV export, and the chart legend follow the new order.</li>
 <li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a circular star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, with an equatorial grid, N / E arrows, north up, east left, and a cross on each other workspace target), plus a link that opens the SkyView quick-query page for a real sky image of the same field in the selected survey (DSS, HEAO 1, RASS, TESS, IRAS 100&mu;m, or 0408 MHz; needs internet; opens in a new tab); the chart and the image are both centered on the target&rsquo;s J2000 position, so the two agree; hovering the star chart shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name, angular offset from the cursor, and a detail table (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts); a second Simbad lookup by name adds the object's parallax with uncertainty, distance, proper motion, radial velocity, and identifiers to the table (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure); the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 5&deg;, with the current radius shown beside it, and the chart re-scales live as the slider moves.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass as seen from the observatory (topocentric position, geocentric position plus diurnal parallax) and the tooltip adds its altitude, illumination fraction, phase name, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
@@ -3246,7 +3252,18 @@ function renderTargetDetails() {
 }
 
 /**
- * Rebuild the per-target edit rows.
+ * Rebuild the per-target edit rows in the Targets panel.
+ *
+ * One row per target, in the state's order, with its color,
+ * name, RA, Dec, and V magnitude inputs, its status text, the
+ * Simbad refresh, the up/down reorder arrows, and the remove
+ * control. The arrows move the target one row and are disabled
+ * at the first and last row; reordering the target list
+ * reorders the observing windows, the CSV export, and the
+ * chart legend, and the new order is saved with the state.
+ *
+ * Also refreshes the finding chart's target list and the
+ * Target details window.
  */
 function renderTargets() {
   var box = $("targets");
@@ -3263,6 +3280,8 @@ function renderTargets() {
       '<input placeholder="V mag" title="V magnitude" inputmode="decimal">' +
       '<span class="info" title="Ephemeris status; click the cross to clear the Simbad record and ephemeris"></span>' +
       '<button class="sb" title="Refresh this target\'s Simbad record (parallax, distance, proper motion, identifiers)" type="button">&#8635;</button>' +
+      '<button class="mu" title="Move this target up in the list" type="button">&#9650;</button>' +
+      '<button class="md" title="Move this target down in the list" type="button">&#9660;</button>' +
       '<button class="rm" title="Remove" type="button">&#215;</button>';
     var kids = row.children;
     kids[0].value = /^#[0-9a-fA-F]{6}$/.test(obj.color || "") ? obj.color : PALETTE[i % PALETTE.length];
@@ -3332,7 +3351,23 @@ function renderTargets() {
           setStatus(error.message);
         });
     });
+    kids[7].disabled = (i === 0);
     kids[7].addEventListener("click", function () {
+      if (i === 0) return;
+      state.objects.splice(i, 1);
+      state.objects.splice(i - 1, 0, obj);
+      renderTargets();
+      afterTargetChange();
+    });
+    kids[8].disabled = (i === state.objects.length - 1);
+    kids[8].addEventListener("click", function () {
+      if (i === state.objects.length - 1) return;
+      state.objects.splice(i, 1);
+      state.objects.splice(i + 1, 0, obj);
+      renderTargets();
+      afterTargetChange();
+    });
+    kids[9].addEventListener("click", function () {
       state.objects.splice(i, 1);
       renderTargets();
       afterTargetChange();

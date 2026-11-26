@@ -68,8 +68,9 @@ The chart, calendar, and summary work offline. Open the page
 directly in a browser or drop the file into a GitHub Pages repository.
 
 The page is fully interactive: edit the observatory (preset or custom
-coordinates/time zone), the start time and duration, and the target list, with
-the chart re-rendering live. Edits persist in the browser (localStorage) until
+coordinates/time zone), the start time and duration, and the target list
+(each row's up/down arrows reorder the targets, and the observing windows,
+CSV export, and legend follow), with the chart re-rendering live. Edits persist in the browser (localStorage) until
 you click **Reset**; **Export JSON** downloads the workspace as a JSON file the
 desktop app can open (`File -> Open...`).
 

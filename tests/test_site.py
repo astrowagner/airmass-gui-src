@@ -1256,6 +1256,189 @@ class CenterNowTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class TargetOrderTests(unittest.TestCase):
+    """Up/down arrows on the target rows reorder the targets.
+
+    Each row's up/down arrow moves that target one row in the
+    target list; the first row's up arrow and the last row's
+    down arrow are disabled. The state's order is the source of
+    truth, so the observing windows (the summary), the CSV
+    export, and the chart legend follow the new order, and it
+    is saved with the state.
+    """
+
+    NOW = int(datetime(2026, 11, 25, 19, 0,
+                       tzinfo=timezone.utc).timestamp() * 1000)
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+
+    def _interp(self):
+        """Page interpreter with the clock pinned at self.NOW."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs("Date.now = function () { return %d; }; 0"
+                      % self.NOW)
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _set_targets(self, interp):
+        """LBT state with three valid targets, TA, TB, TC in order."""
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [ {\"name\": \"TA\", \"ra\": \"17:00:00\","
+            " \"dec\": \"+30:00:00\"},"
+            "            {\"name\": \"TB\", \"ra\": \"18:00:00\","
+            " \"dec\": \"+35:00:00\"},"
+            "            {\"name\": \"TC\", \"ra\": \"19:00:00\","
+            " \"dec\": \"+40:00:00\"} ],"
+            " options: { windows: true, threshold: 2.0 },"
+            " time_range: { start: '2026-11-25T00:00', days: 1 } });"
+            "renderTargets(); 0")
+
+    @staticmethod
+    def _row_classes(interp):
+        """The class attribute of every control in every target row."""
+        return json.loads(interp.evaljs(
+            "(function () {"
+            " var out = [];"
+            " $(\"targets\").children.forEach(function (row) {"
+            "   out.push((row.children || [])"
+            "            .map(function (c) { return c[\"class\"] || \"\"; }));"
+            " });"
+            " return JSON.stringify(out); })()"))
+
+    @staticmethod
+    def _row_names(interp):
+        """The name input of every target row, in row order."""
+        return json.loads(interp.evaljs(
+            "(function () {"
+            " var out = [];"
+            " $(\"targets\").children.forEach(function (row) {"
+            "   var c = row.children[1];"
+            "   out.push(c && \"value\" in c ? c.value : \"\");"
+            " });"
+            " return JSON.stringify(out); })()"))
+
+    @staticmethod
+    def _disabled(interp, row, cls):
+        """True when the arrow of class cls in the given row is disabled."""
+        return json.loads(interp.evaljs(
+            "(function () {"
+            " var row = $(\"targets\").children[%d];"
+            " for (var i = 0; i < row.children.length; i++)"
+            "   if (row.children[i][\"class\"] === \"%s\")"
+            "     return JSON.stringify(row.children[i].disabled);"
+            " return JSON.stringify(null); })()" % (row, cls)))
+
+    @staticmethod
+    def _click_arrow(interp, row, cls):
+        """Click the arrow button of class cls in the given row."""
+        got = interp.evaljs(
+            "(function () {"
+            " var row = $(\"targets\").children[%d];"
+            " for (var i = 0; i < row.children.length; i++)"
+            "   if (row.children[i][\"class\"] === \"%s\") {"
+            "     row.children[i].click(); return true; }"
+            " return false; })()" % (row, cls))
+        assert got is True, "arrow %s not found in row %d" % (cls, row)
+
+    def test_rows_have_up_down_arrows_with_ends_disabled(self):
+        """Each row has ten controls; the arrows are disabled at the ends."""
+        interp = self._interp()
+        self._set_targets(interp)
+        want = ["", "", "", "", "", "info", "sb", "mu", "md", "rm"]
+        for row in self._row_classes(interp):
+            self.assertEqual(row, want)
+        self.assertTrue(self._disabled(interp, 0, "mu"))
+        self.assertFalse(self._disabled(interp, 1, "mu"))
+        self.assertFalse(self._disabled(interp, 1, "md"))
+        self.assertTrue(self._disabled(interp, 2, "md"))
+
+    def test_up_arrow_moves_target_up(self):
+        """The middle row's up arrow swaps it with the row above.
+
+        The new order is the state's order, so the row values and
+        the saved state (localStorage) carry it, and the re-render
+        disables the arrows at the new ends.
+        """
+        interp = self._interp()
+        self._set_targets(interp)
+        self._click_arrow(interp, 1, "mu")
+        want = ["TB", "TA", "TC"]
+        self.assertEqual(interp.evaljs(
+            "state.objects.map(function (o) { return o.name; })"), want)
+        self.assertEqual(self._row_names(interp), want)
+        saved = json.loads(interp.evaljs(
+            "localStorage.getItem(\"airmass-gui-site-state\")"))
+        self.assertEqual([o["name"] for o in saved["objects"]], want)
+        self.assertTrue(self._disabled(interp, 0, "mu"))
+        self.assertTrue(self._disabled(interp, 2, "md"))
+        self.assertFalse(self._disabled(interp, 1, "mu"))
+        self.assertFalse(self._disabled(interp, 1, "md"))
+
+    def test_down_arrow_moves_target_down(self):
+        """The first row's down arrow swaps it with the row below."""
+        interp = self._interp()
+        self._set_targets(interp)
+        self._click_arrow(interp, 0, "md")
+        want = ["TB", "TA", "TC"]
+        self.assertEqual(interp.evaljs(
+            "state.objects.map(function (o) { return o.name; })"), want)
+        self.assertEqual(self._row_names(interp), want)
+        saved = json.loads(interp.evaljs(
+            "localStorage.getItem(\"airmass-gui-site-state\")"))
+        self.assertEqual([o["name"] for o in saved["objects"]], want)
+        self.assertTrue(self._disabled(interp, 0, "mu"))
+        self.assertTrue(self._disabled(interp, 2, "md"))
+
+    def test_summary_and_csv_follow_order(self):
+        """The summary's windows and the CSV export list the targets in
+        the state's order after a reorder."""
+        interp = self._interp()
+        self._set_targets(interp)
+        self._click_arrow(interp, 0, "md")
+        interp.evaljs("renderSummary(); 0")
+        html = interp.evaljs('$("summary").innerHTML')
+        i_tb = html.index("<b>TB</b>")
+        i_ta = html.index("<b>TA</b>")
+        i_tc = html.index("<b>TC</b>")
+        self.assertLess(i_tb, i_ta)
+        self.assertLess(i_ta, i_tc)
+        csv = interp.evaljs("windowsCsv()")
+        order = []
+        for line in csv.split("\n")[1:]:
+            target = line.split(",")[1]
+            if target not in order:
+                order.append(target)
+        self.assertEqual(order, ["TB", "TA", "TC"])
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class NightOfTests(unittest.TestCase):
     """The Night-of dropdown lists local nights and sets the range to one.
 
