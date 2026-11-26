@@ -1441,6 +1441,180 @@ class NightOfTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class WorkspacePresetTests(unittest.TestCase):
+    """Named workspace presets carry a save stamp and rich labels.
+
+    Saved entries are name -> {state, saved}, where saved is the UTC
+    wall time the workspace was saved. The dropdown label of such an
+    entry is its name, the saved state's observatory, the target
+    count, and the save time; an entry saved by an older version as a
+    bare state keeps its name only as the label. Load accepts both
+    shapes; Delete removes the entry.
+    """
+
+    WS = "airmass-gui:workspaces"
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+
+    def _interp(self):
+        """Page interpreter with the clock pinned at 2026-11-25T19:00Z."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs(
+            "Date.now = function () {"
+            " return " + str(int(datetime(2026, 11, 25, 19, 0,
+                                          tzinfo=timezone.utc)
+                                     .timestamp() * 1000)) + "; }; 0")
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _set_state(self, interp):
+        """Normalize an LBT state with one target (Vega) into the page."""
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"Vega\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, threshold: 2.0 },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } }); 0")
+
+    def _ws(self, interp):
+        """The parsed name -> entry map currently in browser storage."""
+        raw = interp.evaljs("localStorage.getItem('%s')" % self.WS)
+        return json.loads(raw) if raw else {}
+
+    def _ws_options(self, interp):
+        """The [value, label] pairs currently in the #ws-select select."""
+        return json.loads(interp.evaljs(
+            "JSON.stringify($('ws-select').children.map("
+            "function (o) { return [o.value, o.textContent]; }))"))
+
+    def _seed(self, interp):
+        """Seed storage with a v2 entry (Alpha) and a legacy entry (Beta)."""
+        interp.evaljs(
+            "localStorage.setItem('%s', JSON.stringify({"
+            " Alpha: { state: { observatory: {"
+            " name: 'Kitt Peak (Mayall 4m)', lat: 31.96333,"
+            " lon: -111.6, elevation_m: 2120,"
+            " timezone: 'America/Phoenix' },"
+            " objects: [{ name: 'a', ra: '5:55:40.8',"
+            " dec: '+38:47:01.28' },"
+            " { name: 'b', ra: '18:36:56.3', dec: '+38:47:01.5' }],"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } },"
+            " saved: '2026-11-01 05:00 UTC' },"
+            " Beta: { observatory: { name: 'X', lat: 10.0,"
+            " lon: 20.0, elevation_m: 100.0, timezone: 'UTC' },"
+            " objects: [], time_range: {"
+            " start: '2026-11-25T00:00', days: 1.0 } }"
+            "})); 0" % self.WS)
+
+    def test_save_stores_state_with_saved_stamp(self):
+        """Saving stores {state, saved} and the label shows the details."""
+        interp = self._interp()
+        self._set_state(interp)
+        interp.evaljs("$('ws-save-btn').click(); 0")
+        ws = self._ws(interp)
+        self.assertIn("Smoke WS", ws)
+        entry = ws["Smoke WS"]
+        self.assertIn("state", entry)
+        self.assertEqual(entry["state"]["objects"][0]["name"], "Vega")
+        self.assertRegex(entry["saved"],
+                         r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$")
+        opts = self._ws_options(interp)
+        self.assertEqual(opts[0][0], "Smoke WS")
+        self.assertRegex(
+            opts[0][1],
+            r"^Smoke WS · Mount Graham \(LBT\) ·"
+            r" 1 target · saved \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$")
+
+    def test_labels_describe_v2_and_legacy_entries(self):
+        """v2 entries are described; legacy bare-state entries keep the name."""
+        interp = self._interp()
+        self._seed(interp)
+        interp.evaljs("refreshWsSelect(); 0")
+        by_val = dict(self._ws_options(interp))
+        self.assertEqual(
+            by_val["Alpha"],
+            "Alpha · Kitt Peak (Mayall 4m) · 2 targets"
+            " · saved 2026-11-01 05:00 UTC")
+        self.assertEqual(by_val["Beta"], "Beta")
+
+    def test_load_unwraps_v2_entry(self):
+        """Loading a v2 entry loads its inner state."""
+        interp = self._interp()
+        self._seed(interp)
+        interp.evaljs(
+            "refreshWsSelect();"
+            "$('ws-select').value = 'Alpha';"
+            "$('ws-load-btn').click(); 0")
+        got = json.loads(interp.evaljs(
+            "JSON.stringify({ obs: state.observatory.name,"
+            " names: state.objects.map(function (o) { return o.name; }),"
+            " status: $('status').textContent })"))
+        self.assertEqual(got["obs"], "Kitt Peak (Mayall 4m)")
+        self.assertEqual(got["names"], ["a", "b"])
+        self.assertIn("Alpha", got["status"])
+
+    def test_load_accepts_legacy_bare_state(self):
+        """Loading an entry saved as a bare state still works."""
+        interp = self._interp()
+        interp.evaljs(
+            "localStorage.setItem('%s', JSON.stringify({"
+            " Beta: { observatory: { name: 'X', lat: 10.0,"
+            " lon: 20.0, elevation_m: 100.0, timezone: 'UTC' },"
+            " objects: [{ name: 'only', ra: '7.5', dec: '-45' }],"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } }"
+            "})); 0" % self.WS)
+        interp.evaljs(
+            "refreshWsSelect();"
+            "$('ws-select').value = 'Beta';"
+            "$('ws-load-btn').click(); 0")
+        got = json.loads(interp.evaljs(
+            "JSON.stringify({ obs: state.observatory.name,"
+            " names: state.objects.map(function (o) { return o.name; }) })"))
+        self.assertEqual(got["obs"], "X")
+        self.assertEqual(got["names"], ["only"])
+
+    def test_delete_removes_the_entry(self):
+        """Delete drops the entry and refreshes the dropdown."""
+        interp = self._interp()
+        self._seed(interp)
+        interp.evaljs(
+            "refreshWsSelect();"
+            "$('ws-select').value = 'Alpha';"
+            "$('ws-delete-btn').click(); 0")
+        ws = self._ws(interp)
+        self.assertNotIn("Alpha", ws)
+        self.assertIn("Beta", ws)
+        self.assertEqual([o[0] for o in self._ws_options(interp)],
+                         ["Beta"])
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class JsCoreNumericTests(unittest.TestCase):
     """Evaluate the page's JS core in Duktape and compare against astropy."""
 
