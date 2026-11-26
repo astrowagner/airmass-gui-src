@@ -1256,6 +1256,191 @@ class CenterNowTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class NightOfTests(unittest.TestCase):
+    """The Night-of dropdown lists local nights and sets the range to one.
+
+    The clock is pinned to 2026-11-25T19:00Z, local noon of Nov 25 in
+    America/Phoenix. The dropdown offers the local day before the
+    current local day (tagged "yesterday") through 14 days ahead
+    (tagged with the year): 16 nights, each a one-day range starting
+    at that local day's midnight. Each label carries the Moon's
+    illumination at the night's closing local midnight and the max
+    altitude of up to two targets over the night. Choosing a night
+    sets the range to that local day; a range whose start is not on
+    an offered night leaves "(custom range)" selected, and choosing
+    it changes nothing.
+    """
+
+    NOW = int(datetime(2026, 11, 25, 19, 0,
+                       tzinfo=timezone.utc).timestamp() * 1000)
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+
+    def _interp(self):
+        """Page interpreter with the clock pinned at self.NOW."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs("Date.now = function () { return %d; }; 0"
+                      % self.NOW)
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _set_state(self, interp, start, days):
+        """Normalize an LBT state with one target (Vega) into the page."""
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"Vega\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, threshold: 2.0 },"
+            " time_range: { start: %r, days: %r } }); 0" % (start, days))
+
+    def _options(self, interp):
+        """The [value, label] pairs currently in the #night-of select."""
+        return json.loads(interp.evaljs(
+            "JSON.stringify($('night-of').children.map("
+            "function (o) { return [o.value, o.textContent]; }))"))
+
+    @staticmethod
+    def _moon_illum(t):
+        """Illuminated fraction of the Moon at t from astropy positions.
+
+        The fraction is (1 + cos phi)/2 where phi is the
+        Sun-Moon-Earth phase angle; the Sun and Moon geocentric
+        positions come from get_sun and get_body.
+        """
+        geoc = EarthLocation(0 * u.m, 0 * u.m, 0 * u.m)
+        moon = get_body("moon", t, location=geoc).cartesian
+        sun = get_sun(t).cartesian
+        to_sun = sun - moon
+        to_earth = -moon
+        cos_phi = float(np.dot(to_sun.xyz.value, to_earth.xyz.value)
+                        / (np.linalg.norm(to_sun.xyz.value)
+                           * np.linalg.norm(to_earth.xyz.value)))
+        return (1.0 + cos_phi) / 2.0
+
+    def test_night_of_lists_yesterday_through_fourteen_ahead(self):
+        """Sixteen nights are offered, tagged, with moon percent in each."""
+        interp = self._interp()
+        self._set_state(interp, "2026-11-25T00:00", 2.0)
+        interp.evaljs("refreshNightOf(); 0")
+        opts = self._options(interp)
+        self.assertEqual(opts[0], ["", "(custom range)"])
+        vals = [o[0] for o in opts[1:]]
+        self.assertEqual(
+            vals, ["2026-11-%02d" % d for d in range(24, 31)]
+            + ["2026-12-%02d" % d for d in range(1, 10)])
+        labels = [o[1] for o in opts[1:]]
+        self.assertIn("yesterday", labels[0])
+        self.assertIn("tonight", labels[1])
+        self.assertIn("tomorrow", labels[2])
+        for lab in labels[3:]:
+            self.assertIn("2026", lab)
+        for lab in labels:
+            self.assertRegex(lab, r" moon \d+%$")
+            self.assertRegex(lab, "Vega \\d+°")
+
+    def test_night_of_change_sets_range_to_that_night(self):
+        """Choosing a night sets the range to that local day, one day long."""
+        interp = self._interp()
+        self._set_state(interp, "2026-11-25T00:00", 2.0)
+        interp.evaljs("refreshNightOf(); 0")
+        interp.evaljs(
+            "$('night-of').value = '2026-11-26';"
+            "$('night-of').dispatchEvent({ type: 'change' }); 0")
+        got = json.loads(interp.evaljs(
+            "JSON.stringify({ start: state.time_range.start,"
+            " days: state.time_range.days,"
+            " ctl: $('start').value })"))
+        self.assertEqual(got["start"], "2026-11-26 00:00")
+        self.assertEqual(got["days"], 1)
+        self.assertEqual(got["ctl"], "2026-11-26 00:00")
+
+    def test_night_of_change_ignores_custom_range(self):
+        """Choosing "(custom range)" leaves the range unchanged."""
+        interp = self._interp()
+        self._set_state(interp, "2026-01-15T00:00", 2.0)
+        interp.evaljs("refreshNightOf(); 0")
+        interp.evaljs(
+            "$('night-of').value = '';"
+            "$('night-of').dispatchEvent({ type: 'change' }); 0")
+        got = json.loads(interp.evaljs(
+            "JSON.stringify({ start: state.time_range.start,"
+            " days: state.time_range.days })"))
+        self.assertEqual(got["start"], "2026-01-15T00:00")
+        self.assertEqual(got["days"], 2.0)
+
+    def test_night_of_selects_the_shown_night(self):
+        """The night the range starts on is selected; none for custom."""
+        interp = self._interp()
+        self._set_state(interp, "2026-11-25T00:00", 1.0)
+        interp.evaljs("refreshNightOf(); 0")
+        self.assertEqual(
+            json.loads(interp.evaljs("JSON.stringify($('night-of').value)")),
+            "2026-11-25")
+        self._set_state(interp, "2026-01-15T00:00", 2.0)
+        interp.evaljs("refreshNightOf(); 0")
+        self.assertEqual(
+            json.loads(interp.evaljs("JSON.stringify($('night-of').value)")),
+            "")
+
+    def test_night_of_labels_match_astropy(self):
+        """Tonight's label: moon percent and Vega max alt agree with astropy.
+
+        The moon percent is at the night's closing local midnight
+        (2026-11-26 07:00 UTC at America/Phoenix); the Vega altitude is
+        the max over the night sampled at the same half-hour grid the
+        page uses, against astropy's refraction-free apparent altitude.
+        """
+        interp = self._interp()
+        self._set_state(interp, "2026-11-25T00:00", 2.0)
+        interp.evaljs("refreshNightOf(); 0")
+        opts = self._options(interp)
+        tonight = [o[1] for o in opts if o[0] == "2026-11-25"][0]
+        m = re.search(r"moon (\d+)%$", tonight)
+        self.assertIsNotNone(m)
+        illum = self._moon_illum(Time("2026-11-26 07:00:00"))
+        self.assertAlmostEqual(int(m.group(1)), illum * 100, delta=1.0)
+        am = re.search(r"Vega (\d+)°", tonight)
+        self.assertIsNotNone(am)
+        loc = EarthLocation.from_geodetic(
+            LBT.lon * u.deg, LBT.lat * u.deg, LBT.elevation_m)
+        best = -90.0
+        for i in range(49):
+            ts = Time("2026-11-25 07:00:00") + i * 1800 * u.s
+            aa = AltAz(obstime=ts, location=loc)
+            aa.refraction = 0 * u.deg
+            alt = float(VEGA.transform_to(aa).alt.deg)
+            if alt > best:
+                best = alt
+        self.assertAlmostEqual(int(am.group(1)), best, delta=0.5)
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class JsCoreNumericTests(unittest.TestCase):
     """Evaluate the page's JS core in Duktape and compare against astropy."""
 
