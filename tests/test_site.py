@@ -28,6 +28,7 @@ from airmass_gui import astro, chart, lookup
 from airmass_gui.observatories import PRESETS, RENAME_MAP, to_dict
 from airmass_gui.site import THEMES, _blend_hex, build_site
 from airmass_gui.workspace import load, new_workspace, save
+from test_finding_details_live import VEGA_FIXTURE
 
 try:
     import dukpy
@@ -57,7 +58,8 @@ CORE_FUNCTIONS = [
     "moonRaDec", "moonTopocentric", "moonRiseSet", "moonPhase", "angularSep", "targetInfoText",
     "objCoords", "fieldRotationDeg",
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
-    "simbadCooParse", "findingOffsetText", "findingDetailTable",
+    "simbadCooParse", "findingOffsetText", "findingMagList",
+    "findingBasicTable", "findingDetailTable",
     "findingStarSize", "findingQueryRadius",
     "findingRadiusText", "findingRadiusFromZoom",
     "findingScaleArcmin", "hips2fitsImageUrl",
@@ -447,9 +449,10 @@ class SitePageTests(unittest.TestCase):
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
         zoom slider, a star-chart canvas with the hover's
-        nearest-object line below it, the inline CDS DSS2 color sky
-        image with its new-tab link and the hover's detail table below
-        it, the Simbad coo lookup, and a resizable panel."""
+        nearest-object line and basic-field table below it, the inline
+        CDS DSS2 color sky image with its new-tab link and the
+        hover's record-expansion table below it, the Simbad coo
+        lookup, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -531,6 +534,8 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('INFO_RESERVE_PX', self.page)
         self.assertIn('#finding-details table { border-collapse: collapse;',
                       self.page)
+        self.assertIn('#finding-nearest table { border-collapse: collapse;',
+                      self.page)
         # The collapsed line (cursor position, nearest name and offset)
         # sits in the left pane below the star chart; only the detail
         # table sits in the right pane below the sky image.
@@ -542,6 +547,8 @@ class SitePageTests(unittest.TestCase):
         self.assertLess(nearest, img)
         self.assertLess(img, details)
         self.assertIn('function findingOffsetText(', self.page)
+        self.assertIn('function findingMagList(', self.page)
+        self.assertIn('function findingBasicTable(', self.page)
         self.assertIn('function findingDetailTable(', self.page)
         # The cutout is fetched at runtime: the page ships without an
         # img src, without a SkyView link, and without the survey option.
@@ -1806,13 +1813,18 @@ class PanelOrderTests(unittest.TestCase):
 class FindingHoverLayoutTests(unittest.TestCase):
     """The finding chart's hover info is split across the two panes.
 
-    The collapsed line — the cursor position and, when a row is
-    available, the nearest object's name and angular offset from the
-    cursor — renders below the star chart (#finding-nearest, left
-    pane); only the expansion, findingDetailTable's field table,
-    renders below the sky image (#finding-details, right pane).
-    clearFindingInfo restores the placeholder in the left element and
-    empties the right one. The clock is pinned to 2026-11-25T19:00Z.
+    The left pane below the star chart (#finding-nearest) shows the
+    cursor position and, when a row is available, the nearest
+    object's name, angular offset from the cursor, and the basic
+    field table (findingBasicTable: RA/Dec, Mags, SpT, Type, From
+    target, Bib/Notes, a "-" cell where a field is blank); the right
+    pane below the sky image (#finding-details) shows only the record
+    expansion (findingDetailTable: Parallax, Distance, Proper motion,
+    Radial velocity, Identifiers, a "-" cell where the record lacks
+    the field, a single "querying" row while the lookup is in
+    flight). clearFindingInfo restores the placeholder in the left
+    element and empties the right one. The clock is pinned to
+    2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
@@ -1872,20 +1884,77 @@ class FindingHoverLayoutTests(unittest.TestCase):
             " radiusArcmin: 7.5, label: 'Vega', centerIdx: 0 }; 0")
 
     def test_hover_line_under_chart_table_under_image(self):
-        """updateFindingInfoAt puts the cursor + nearest line in
-        #finding-nearest and the detail table in #finding-details."""
+        """updateFindingInfoAt puts the cursor + nearest line and the
+        basic table in #finding-nearest and the expansion table in
+        #finding-details.
+
+        The Vega record is the archived sim-id reply
+        (fixtures/simbad_vega.txt) parsed by the page's own
+        simbadParseRecord.
+        """
+        interp = self._interp()
+        self._setup_hover(interp)
+        vega = VEGA_FIXTURE.read_text(encoding="utf-8")
+        interp.evaljs(
+            "findingDetailsCache['Vega'] = { ok: true, record:"
+            " simbadParseRecord(" + json.dumps(vega) + ") }; 0")
+        out = interp.evaljs(
+            "updateFindingInfoAt({ raDeg: 279.235, dec: 38.784 });"
+            ' JSON.stringify({ left: $("finding-nearest").innerHTML,'
+            ' right: $("finding-details").innerHTML })')
+        info = json.loads(out)
+        self.assertIn("Cursor:", info["left"])
+        self.assertIn("Nearest: Vega", info["left"])
+        self.assertIn("from cursor", info["left"])
+        self.assertNotIn("from cursor", info["right"])
+        self.assertIn("<table>", info["left"])
+        self.assertIn("<table>", info["right"])
+        for label in ("RA/Dec", "Mags", "SpT", "Type", "From target",
+                      "Bib/Notes"):
+            self.assertIn(label, info["left"])
+            self.assertNotIn(label, info["right"])
+        for label in ("Parallax", "Distance", "Proper motion",
+                      "Radial velocity", "Identifiers"):
+            self.assertNotIn(label, info["left"])
+            self.assertIn(label, info["right"])
+
+    def test_hover_sparse_row_fixed_rows(self):
+        """A row with no optional fields still renders every basic
+        row in the left pane with a "-" cell, and the right pane shows
+        a single "querying" row while the record lookup is in flight,
+        then the five expansion rows, all "-", once the record is
+        (nonexistent) and cached.
+        """
         interp = self._interp()
         self._setup_hover(interp)
         interp.evaljs(
-            "updateFindingInfoAt({ raDeg: 279.235, dec: 38.784 }); 0")
-        left = interp.evaljs('JSON.stringify($("finding-nearest").innerHTML)')
-        right = interp.evaljs('JSON.stringify($("finding-details").innerHTML)')
-        self.assertIn("Cursor:", left)
-        self.assertIn("Nearest: Vega", left)
-        self.assertIn("from cursor", left)
-        self.assertNotIn("from cursor", right)
-        self.assertIn("<table>", right)
-        self.assertNotIn("<table>", left)
+            "findingHover.rows.push({ name: 'faint object',"
+            " raDeg: 279.5, dec: 38.7 }); 0")
+        out = interp.evaljs(
+            "updateFindingInfoAt({ raDeg: 279.5, dec: 38.7 });"
+            ' JSON.stringify({ left: $("finding-nearest").innerHTML,'
+            ' right: $("finding-details").innerHTML })')
+        info = json.loads(out)
+        self.assertIn("Nearest: faint object", info["left"])
+        for label in ("RA/Dec", "Mags", "SpT", "Type", "From target",
+                      "Bib/Notes"):
+            self.assertIn(label, info["left"])
+        self.assertEqual(info["left"].count("<td>-</td>"), 5,
+                         info["left"])
+        self.assertNotIn("querying", info["left"])
+        self.assertIn("querying Simbad", info["right"])
+        self.assertEqual(info["right"].count("<tr>"), 1, info["right"])
+        interp.evaljs(
+            'findingDetailsCache["faint object"] = { ok: true,'
+            " record: null }; 0")
+        right2 = interp.evaljs(
+            "updateFindingInfoAt({ raDeg: 279.5, dec: 38.7 });"
+            ' JSON.stringify($("finding-details").innerHTML)')
+        for label in ("Parallax", "Distance", "Proper motion",
+                      "Radial velocity", "Identifiers"):
+            self.assertIn("<th>%s</th><td>-</td>" % label, right2)
+        self.assertNotIn("querying", right2)
+        self.assertNotIn("<th>RA/Dec</th>", right2)
 
     def test_clear_finding_info_split(self):
         """clearFindingInfo restores the placeholder under the chart
@@ -3383,8 +3452,13 @@ class JsCoreNumericTests(unittest.TestCase):
                          f"query radius not monotonic in size: {vals}")
         self.assertTrue(all(v > 7.5 * math.sqrt(2) for v in vals))
 
-    def test_finding_offset_and_detail_table(self):
-        """findingOffsetText units and findingDetailTable row selection."""
+    def test_finding_offset_and_basic_table(self):
+        """findingOffsetText units and findingBasicTable's fixed rows.
+
+        The basic table always renders every row - RA/Dec, Mags, SpT,
+        Type, From target, Bib/Notes - with a "-" cell where the field
+        is blank for this object, and carries no record expansion.
+        """
         self.assertEqual(self._js("findingOffsetText(0.75)"), "0.8\u2033")
         self.assertEqual(self._js("findingOffsetText(59.94)"),
                          "59.9\u2033")
@@ -3394,7 +3468,7 @@ class JsCoreNumericTests(unittest.TestCase):
                "u": 0.03, "b": 0.03, "v": 0.03, "r": 0.07, "i": 0.10,
                "spt": "A0V", "typ": "dS*", "distArcsec": 0.46,
                "bib": 2817, "notn": 1}
-        html = self._js(f"findingDetailTable({json.dumps(row)})")
+        html = self._js(f"findingBasicTable({json.dumps(row)})")
         self.assertIn("<th>RA/Dec</th>", html)
         self.assertIn("<th>Mags</th><td>U 0.03  B 0.03  V 0.03  "
                       "R 0.07  I 0.10</td>", html)
@@ -3402,20 +3476,28 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertIn("<th>Type</th><td>dS*</td>", html)
         self.assertIn("<th>From target</th><td>0.5\u2033</td>", html)
         self.assertIn("<th>Bib/Notes</th><td>2817 / 1</td>", html)
+        for label in ("Parallax", "Distance", "Proper motion",
+                      "Radial velocity", "Identifiers"):
+            self.assertNotIn("<th>%s</th>" % label, html)
         sparse = {"raDeg": 10.0, "dec": -20.0}
-        html2 = self._js(f"findingDetailTable({json.dumps(sparse)})")
+        html2 = self._js(f"findingBasicTable({json.dumps(sparse)})")
         self.assertIn("<th>RA/Dec</th>", html2)
-        self.assertNotIn("<th>Mags</th>", html2)
-        self.assertNotIn("<th>SpT</th>", html2)
-        self.assertNotIn("<th>From target</th>", html2)
+        self.assertEqual(html2.count("<td>-</td>"), 5, html2)
+        # The sim-id record's fluxes fill the Mags row.
+        extra = {"fluxes": {"J": {"value": -0.177, "err": 0.206}}}
+        html3 = self._js("findingBasicTable(" + json.dumps(sparse) +
+                         ", " + json.dumps(extra) + ")")
+        self.assertIn("<th>Mags</th><td>J -0.18 \u00b10.21</td>", html3)
 
 
     def test_finding_detail_table_extra(self):
-        """findingDetailTable merges the sim-id record's fields and a pending row."""
-        row = {"raDeg": 279.186354, "dec": 38.783639,
-               "u": 0.03, "b": 0.03, "v": 0.03, "r": 0.07, "i": 0.10,
-               "spt": "A0V", "typ": "dS*", "distArcsec": 0.46,
-               "bib": 2817, "notn": 1}
+        """findingDetailTable's fixed expansion rows and the pending row.
+
+        The record's fields - Parallax, Distance, Proper motion,
+        Radial velocity, Identifiers - always render, with a "-" cell
+        where the record lacks the field; while the lookup is in
+        flight the table is a single "querying" row.
+        """
         idents = ["ID %d" % k for k in range(13)]
         extra = {"spec": "A0V", "plx": 130.23, "plxErr": 0.36,
                  "pmRa": 200.94, "pmDec": 286.23, "pmRaErr": 0.32,
@@ -3424,21 +3506,37 @@ class JsCoreNumericTests(unittest.TestCase):
                             "H": {"value": -0.029, "err": 0.146},
                             "K": {"value": 0.129, "err": 0.186}},
                  "idents": idents}
-        html = self._js("findingDetailTable(" + json.dumps(row) + ", " +
-                        json.dumps(extra) + ", true)")
-        self.assertIn("<th>Mags</th><td>U 0.03  B 0.03  V 0.03  R 0.07  "
-                      "I 0.10  J -0.18 \u00b10.21  H -0.03 \u00b10.15  "
-                      "K 0.13 \u00b10.19</td>", html)
+        html = self._js("findingDetailTable(" + json.dumps(extra) +
+                        ", true)")
+        self.assertEqual(html.count("<tr>"), 1, html)
+        self.assertIn("<th>Details</th><td>querying Simbad\u2026</td>",
+                      html)
+        html2 = self._js("findingDetailTable(" + json.dumps(extra) + ")")
         self.assertIn("<th>Parallax</th><td>130.23 \u00b1 0.36 mas</td>",
-                      html)
+                      html2)
         self.assertIn("<th>Distance</th><td>7.68 pc \u00b1 0.02 pc</td>",
-                      html)
+                      html2)
         self.assertIn("<th>Proper motion</th><td>RA +200.94\u00b10.32 / "
-                      "Dec +286.23\u00b10.40 mas/yr</td>", html)
-        self.assertIn("<th>Radial velocity</th><td>-13.5 km/s</td>", html)
-        self.assertIn("<th>Identifiers</th>", html)
-        self.assertIn("(+ 1 more)", html)
-        self.assertIn("<th>Details</th><td>querying Simbad\u2026</td>", html)
+                      "Dec +286.23\u00b10.40 mas/yr</td>", html2)
+        self.assertIn("<th>Radial velocity</th><td>-13.5 km/s</td>", html2)
+        self.assertIn("<th>Identifiers</th>", html2)
+        self.assertIn("(+ 1 more)", html2)
+        for label in ("RA/Dec", "Mags", "SpT", "Type", "From target",
+                      "Bib/Notes"):
+            self.assertNotIn("<th>%s</th>" % label, html2)
+        # Without a record, the five expansion rows still render, all
+        # "-".
+        html3 = self._js("findingDetailTable(null)")
+        for label in ("Parallax", "Distance", "Proper motion",
+                      "Radial velocity", "Identifiers"):
+            self.assertIn("<th>%s</th><td>-</td>" % label, html3)
+        # A partial record leaves the missing fields as "-".
+        html4 = self._js("findingDetailTable(" + json.dumps({"plx": 23.45})
+                         + ")")
+        self.assertIn("<th>Parallax</th><td>23.45 mas</td>", html4)
+        self.assertIn("<th>Distance</th><td>42.6 pc</td>", html4)
+        for label in ("Proper motion", "Radial velocity", "Identifiers"):
+            self.assertIn("<th>%s</th><td>-</td>" % label, html4)
 
     def test_share_fragment_round_trip(self):
         """encode/decodeShareFragment round-trip both ways; malformed fragments give null."""
