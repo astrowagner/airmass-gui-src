@@ -59,7 +59,7 @@ CORE_FUNCTIONS = [
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
     "findingStarSize",
-    "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
+    "findingRadiusText", "findingRadiusFromZoom",
     "findingScaleArcmin", "hips2fitsImageUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
     "weatherSymbolKind", "wmoText", "wmoIcon",
@@ -477,6 +477,9 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('function findingScaleArcmin(', self.page)
         self.assertIn('var FINDING_FOV_MAX_DEG = 0.25', self.page)
         self.assertNotIn('finding-imgwrap', self.page)
+        self.assertNotIn('findingGridStep', self.page)
+        self.assertNotIn('ctx.arc(cx, cy, R, 0, 2 * Math.PI);',
+                      self.page)
         self.assertIn('<span id="finding-zoom-label">7.5&prime;</span>',
                       self.page)
         self.assertIn('<div id="finding-scale"', self.page)
