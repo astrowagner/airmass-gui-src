@@ -475,11 +475,15 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('function hips2fitsImageUrl(', self.page)
         self.assertIn('function findingScaleArcmin(', self.page)
-        self.assertIn('var FINDING_FOV_DEG = 0.25', self.page)
+        self.assertIn('var FINDING_FOV_MAX_DEG = 0.25', self.page)
+        self.assertNotIn('finding-imgwrap', self.page)
+        self.assertIn('<span id="finding-zoom-label">7.5&prime;</span>',
+                      self.page)
         self.assertIn('<div id="finding-scale"', self.page)
         self.assertIn('id="finding-scale-bar"', self.page)
         self.assertIn('id="finding-scale-label"', self.page)
-        self.assertIn('hips2fitsImageUrl(c.raDeg, c.dec)', self.page)
+        self.assertIn('hips2fitsImageUrl(c.raDeg, c.dec, radiusArcmin / 30.0)',
+                      self.page)
         self.assertIn('img.src = imgUrl', self.page)
         self.assertIn('$("finding-img").addEventListener("error"',
                       self.page)
@@ -971,6 +975,37 @@ class CdsSkyImageTests(unittest.TestCase):
             "hips2fits?hips=DSS2%2Fcolor&width=500&height=500"
             "&projection=TAN&fov=0.25&ra=101.28720&dec=-16.71610"
             "&format=jpg")
+        url = self.interp.evaljs(
+            "hips2fitsImageUrl(10.6847083, 41.26875, 0.125)")
+        self.assertIn("&projection=TAN&fov=0.125&", url)
+
+    def test_zoom_ties_image_field_to_chart(self):
+        """The cutout's field of view is twice the chart radius.
+
+        The slider runs the radius from 0.5 to 7.5 arcmin, so the
+        requested cutout field runs from 1 arcmin to 0.25 deg (the
+        recorded DSS2 field): at both ends the img URL carries that
+        fov.
+        """
+        for zoom, fov in (("0", 1.0 / 60.0), ("1000", 0.25)):
+            self.interp.evaljs(
+                "state = normalizeState({ observatory: {"
+                " name: 'Mount Graham (LBT)', lat: 32.70131,"
+                " lon: -109.88906, elevation_m: 3221.0,"
+                " timezone: 'America/Phoenix',"
+                " preset: 'Mount Graham (LBT)' },"
+                " objects: " + json.dumps(
+                    [{"name": "t", "ra": "279.2347", "dec": "38.7837"}]) + ","
+                " options: { finding: true },"
+                " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+                "$('finding-target').value = '0';"
+                "$('finding-zoom').value = '" + zoom + "';"
+                "updateFindingChart();"
+            )
+            src = self.interp.evaljs(
+                "JSON.stringify($('finding-img').src)")
+            got = float(re.search(r"[?&]fov=([^&]+)", src).group(1))
+            self.assertAlmostEqual(got, fov, delta=1e-5)
 
     def test_img_error_shows_unavailable(self):
         """A failed image load says the image is unavailable, hides the
@@ -1000,9 +1035,10 @@ class CdsSkyImageTests(unittest.TestCase):
     def test_scale_bar_matches_recorded_wcs(self):
         """The scale bar spans one third of the cutout's field.
 
-        findingScaleArcmin picks 5 arcmin for the 0.25 deg cutout, so
-        after updateFindingChart the bar is 33.33 percent of the
-        image width with a 5' label; the fov the URL builder requests
+        At the default maximum zoom-out (7.5 arcmin radius, 0.25 deg
+        cutout) findingScaleArcmin picks 5 arcmin, so after
+        updateFindingChart the bar is 33.33 percent of the image
+        width with a 5' label; the fov the URL builder requests
         reproduces the recorded FITS WCS's center-row field.
         """
         self.assertEqual(self.interp.evaljs("findingScaleArcmin(15)"), 5)
@@ -1017,7 +1053,7 @@ class CdsSkyImageTests(unittest.TestCase):
             " options: { finding: true },"
             " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
             "$('finding-target').value = '0';"
-            "$('finding-zoom').value = '640';"
+            "$('finding-zoom').value = '1000';"
             "updateFindingChart();"
         )
         width = float(self.interp.evaljs(
@@ -3179,15 +3215,18 @@ class JsCoreNumericTests(unittest.TestCase):
             self._js("simbadCooParse('no table here')")["count"])
 
     def test_finding_zoom_radius(self):
-        """findingRadiusFromZoom log mapping: endpoints, default, monotonic."""
+        """findingRadiusFromZoom log mapping: endpoints, default, monotonic.
+
+        The range is 0.5 to 7.5 arcmin, the DSS2 cutout's half field
+        (0.25 deg / 2), so the maximum zoom-out matches the sky image.
+        """
         self.assertEqual(self._js("findingRadiusFromZoom(0)"), 0.5)
-        self.assertEqual(self._js("findingRadiusFromZoom(640)"), 30)
-        self.assertEqual(self._js("findingRadiusFromZoom(1000)"), 300)
-        self.assertEqual(self._js("findingRadiusFromZoom(250)"), 2.5)
-        self.assertEqual(self._js("findingRadiusFromZoom(500)"), 12)
-        self.assertEqual(self._js("findingRadiusFromZoom(750)"), 61)
+        self.assertEqual(self._js("findingRadiusFromZoom(1000)"), 7.5)
+        self.assertEqual(self._js("findingRadiusFromZoom(250)"), 1.0)
+        self.assertEqual(self._js("findingRadiusFromZoom(500)"), 1.9)
+        self.assertEqual(self._js("findingRadiusFromZoom(750)"), 3.8)
         vals = [self._js(f"findingRadiusFromZoom({t})")
-                for t in (0, 250, 500, 640, 750, 1000)]
+                for t in (0, 250, 500, 750, 1000)]
         self.assertEqual(vals, sorted(vals),
                          f"zoom mapping not monotonic: {vals}")
         self.assertTrue(all(v > 0 for v in vals))
