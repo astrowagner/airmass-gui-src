@@ -486,6 +486,10 @@ __canvas.parentElement = __makeEl("div");
 __canvas.parentElement.getBoundingClientRect = function () {
   return { left: 0, top: 0, width: 820, height: 700 };
 };
+// The sky image is covered by a transparent overlay canvas for the
+// hover crosshair; give it the same mock context.
+if (__els["finding-img-overlay"])
+  __els["finding-img-overlay"].getContext = function () { return __ctx; };
 
 document = {
   documentElement: __makeEl("html"),

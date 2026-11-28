@@ -1082,6 +1082,12 @@ class CdsSkyImageTests(unittest.TestCase):
             "$('finding-zoom').value = '1000';"
             "var fc = $('finding-chart');"
             "fc.getContext = function () { return __ctx; };"
+            "var __noctx = { setTransform: function () {}, clearRect: function"
+            " () {}, beginPath: function () {}, arc: function () {},"
+            " moveTo: function () {}, lineTo: function () {},"
+            " stroke: function () {} };"
+            "$('finding-img-overlay').getContext = function () {"
+            " return __noctx; };"
             "var fcsize = findingCanvasSize();"
             "var c = objCoords(state.objects[0], Date.now());"
             "var q = findingQueryRadius(7.5, fcsize);"
@@ -1146,6 +1152,113 @@ class CdsSkyImageTests(unittest.TestCase):
             "JSON.stringify({ stroke: __strokeSet[__strokeSet.length - 1] })"))
         self.assertEqual(ok2["stroke"], "#ffffff",
                          "red/night theme crosshair is not white")
+
+    def test_hover_mark_encircled_crosshair_on_image(self):
+        """The hover crosshair is drawn on the sky image, too.
+
+        The DSS2 cutout covers the same field as the star chart, so
+        the object whose details the hover panel shows gets the
+        encircled crosshair on the image overlay as well, at the
+        linear pixel position the image's own hover mapping uses, in
+        the theme's highlight color (white in red/night). Clearing the
+        hover and hiding the image clear the overlay.
+        """
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "Vega", "ra": "279.2347", "dec": "38.7837"}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "applyTheme('dark');"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "__octx = { arcs: [], clears: 0, strokeSet: [] };"
+            "__octx.setTransform = function () {};"
+            "__octx.clearRect = function () { this.clears++; };"
+            "__octx.beginPath = function () {};"
+            "__octx.arc = function (x, y, r) { this.arcs.push([x, y, r]); };"
+            "__octx.moveTo = function () {};"
+            "__octx.lineTo = function () {};"
+            "__octx.stroke = function () {"
+            " this.strokeSet.push(this.strokeStyle); }; "
+            "var ov = $('finding-img-overlay');"
+            "ov.getContext = function () { return __octx; };"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, findingCanvasSize());"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: ["
+            "  { name: 'Vega', raDeg: c.raDeg, dec: c.dec, v: 0.03 },"
+            "  { name: 'faint', raDeg: 279.3, dec: 38.7, v: 9.0 } ],"
+            " count: 2 };"
+            "updateFindingChart();"
+        )
+        size = self.interp.evaljs("findingCanvasSize()")
+        center = size / 2
+        self.interp.evaljs(
+            "updateFindingInfo(" + repr(center) + ", " + repr(center)
+            + "); 0")
+        rec = json.loads(self.interp.evaljs(
+            "JSON.stringify({ arcs: __octx.arcs, clears: __octx.clears,"
+            " strokeSet: __octx.strokeSet })"))
+        self.assertEqual(rec["strokeSet"][-1], "#ff5555",
+                         "image crosshair not stroked in the highlight color")
+        last = rec["arcs"][-1]
+        self.assertAlmostEqual(last[2], 9.0, delta=1e-9)
+        self.assertAlmostEqual(last[0], center, delta=1e-6)
+        self.assertAlmostEqual(last[1], center, delta=1e-6)
+        # The mark follows the hover: the faint row sits at the linear
+        # pixel position its angular offset from the center implies
+        # (the image maps its square field around the J2000 center).
+        self.interp.evaljs(
+            "var p2 = gnomonicProject(279.3, 38.7,"
+            " findingHover.center.raDeg, findingHover.center.dec);"
+            "var scale2 = (findingCanvasSize() / 2 - 8) / d2r("
+            " findingHover.radiusArcmin / 60);"
+            "updateFindingInfo(findingCanvasSize() / 2 - p2.x * scale2,"
+            " findingCanvasSize() / 2 - p2.y * scale2); 0")
+        exp = json.loads(self.interp.evaljs(
+            "(function () {"
+            "  var fovDeg = findingHover.radiusArcmin / 30;"
+            "  var dRa = wrap360(279.3 - findingHover.center.raDeg)"
+            "           * Math.cos(d2r(findingHover.center.dec));"
+            "  var dDec = 38.7 - findingHover.center.dec;"
+            "  var s = findingCanvasSize();"
+            "  return JSON.stringify({"
+            "    x: s / 2 - dRa / fovDeg * s,"
+            "    y: s / 2 - dDec / fovDeg * s });"
+            "})()"))
+        last = json.loads(self.interp.evaljs(
+            "JSON.stringify(__octx.arcs[__octx.arcs.length - 1])"))
+        self.assertAlmostEqual(last[0], exp["x"], delta=1e-6)
+        self.assertAlmostEqual(last[1], exp["y"], delta=1e-6)
+        self.assertAlmostEqual(last[2], 9.0, delta=1e-9)
+        # Red/night theme: the theme-sel handler re-draws through
+        # updateFindingChart; the mark comes back white.
+        self.interp.evaljs(
+            "applyTheme('red'); updateFindingChart(); 0")
+        self.assertEqual(json.loads(self.interp.evaljs(
+            "JSON.stringify(__octx.strokeSet[__octx.strokeSet.length - 1])"
+        )), "#ffffff", "red/night image crosshair is not white")
+        # Clearing the hover clears the overlay.
+        before = self.interp.evaljs("__octx.clears")
+        self.interp.evaljs("clearFindingInfo(); 0")
+        self.assertGreater(self.interp.evaljs("__octx.clears"), before,
+                           "clearing the hover does not clear the overlay")
+        # Hiding the image clears the overlay, too.
+        self.interp.evaljs(
+            "updateFindingInfo(" + repr(center) + ", " + repr(center)
+            + "); 0")
+        before = self.interp.evaljs("__octx.clears")
+        self.interp.evaljs(
+            "$('finding-img').dispatchEvent({ type: 'error' }); 0")
+        self.assertGreater(self.interp.evaljs("__octx.clears"), before,
+                           "hiding the image does not clear the overlay")
 
     def test_img_error_shows_unavailable(self):
         """A failed image load says the image is unavailable, hides the
