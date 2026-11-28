@@ -63,7 +63,8 @@ hourly overlay when the Weather checkbox is on, and the daily Weather
 report panel when the Weather report checkbox is on), CDS Simbad name
 lookups and finding-chart
 object queries, plus links the user opens in new tabs (the SkyView
-quick-query page and the weather services behind the Weather report).
+quick-query page, the CDS HiPS2FITS DSS2-color cutout, and the weather
+services behind the Weather report).
 The chart, calendar, and summary work offline. Open the page
 directly in a browser or drop the file into a GitHub Pages repository.
 

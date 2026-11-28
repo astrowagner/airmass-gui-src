@@ -33,6 +33,11 @@ try:
 except ImportError:  # pragma: no cover
     dukpy = None
 
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover
+    Image = None
+
 LBT = PRESETS["Mount Graham (LBT)"]
 VEGA = SkyCoord("18h36m56.30142s", "+38d47m01.4506s", frame="icrs")
 
@@ -54,7 +59,7 @@ CORE_FUNCTIONS = [
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
     "findingStarSize",
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
-    "skyViewPosition", "skyViewQueryUrl",
+    "skyViewPosition", "skyViewQueryUrl", "hips2fitsImageUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
     "weatherSymbolKind", "wmoText", "wmoIcon",
     "blendHex",
@@ -352,9 +357,9 @@ class SitePageTests(unittest.TestCase):
         # The page must be self-contained: no external assets may be loaded.
         # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
         # send Access-Control-Allow-Origin: *, so nothing is embedded. The
-        # SkyView quick-query link in the finding chart is likewise a
-        # runtime opt-in: it opens in a new tab only when the user clicks
-        # it, so nothing is embedded.)
+        # SkyView quick-query link and the CDS HiPS2FITS cutout link in the
+        # finding chart are likewise runtime opt-ins: each opens in a new
+        # tab only when the user clicks it, so nothing is embedded.)
         for token in ("<script src", "<link ", "@import", "url(",
                       "<iframe", "<object", "<embed"):
             self.assertNotIn(token, self.page)
@@ -441,8 +446,9 @@ class SitePageTests(unittest.TestCase):
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
         zoom slider and survey selector, a star-chart canvas, the SkyView
-        page link, the Simbad coo lookup, and a resizable panel with a
-        fixed hover-info column on the right of the chart."""
+        page link, the CDS DSS2 color cutout link, the Simbad coo
+        lookup, and a resizable panel with a fixed hover-info column on
+        the right of the chart."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -454,6 +460,8 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<canvas id="finding-chart"></canvas>', self.page)
         self.assertIn('<select id="finding-survey">', self.page)
         self.assertIn('<a id="finding-skylink" href="#" target="_blank"',
+                      self.page)
+        self.assertIn('<a id="finding-cdslink" href="#" target="_blank"',
                       self.page)
         self.assertIn('id="finding-panes"', self.page)
         self.assertIn('flex: 1 1 180px', self.page)
@@ -475,6 +483,8 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('function skyViewPosition(', self.page)
         self.assertIn('function skyViewQueryUrl(', self.page)
+        self.assertIn('function hips2fitsImageUrl(', self.page)
+        self.assertIn('hips2fitsImageUrl(c.raDeg, c.dec)', self.page)
         self.assertIn(
             'skyViewQueryUrl($("finding-survey").value, c.raDeg, c.dec)',
             self.page)
@@ -508,8 +518,10 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('function findingOffsetText(', self.page)
         self.assertIn('function findingDetailTable(', self.page)
         self.assertNotIn('id="finding-img"', self.page)
-        self.assertNotIn('alasky.cds.unistra.fr', self.page)
-        self.assertNotIn('aladin.cds.unistra.fr', self.page)
+        # No image is fetched inline from CDS; the DSS2 color
+        # cutout is a link the user opens in a new tab.
+        self.assertNotIn('src="https://alasky', self.page)
+        self.assertNotIn('src="https://aladin', self.page)
         self.assertNotIn('function hpxHash(', self.page)
         self.assertNotIn('function updateFindingImage(', self.page)
         self.assertNotIn('function drawCutoutOverlay(', self.page)
@@ -908,6 +920,134 @@ class SkyViewPositionTests(unittest.TestCase):
             got_ra, got_dec = self._link_position_deg(ra, dec)
             self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
             self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
+
+    def _cds_link_position_deg(self, ra, dec):
+        """Return the CDS cutout link's center parsed back to degrees."""
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "t", "ra": ra, "dec": dec}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '640';"
+            "updateFindingChart();"
+        )
+        href = self.interp.evaljs(
+            "JSON.stringify($('finding-cdslink').href)")
+        ra_raw = urllib.parse.unquote(
+            re.search(r"[?&]ra=([^&]+)", href).group(1))
+        dec_raw = urllib.parse.unquote(
+            re.search(r"[?&]dec=([^&]+)", href).group(1))
+        return float(ra_raw), float(dec_raw)
+
+    def test_cdslink_center_is_j2000(self):
+        """Vega, Sirius and M31 cutouts center within 1 arcsec of J2000."""
+        for ra, dec, (want_ra, want_dec) in (
+                ("279.2347", "38.7837", (279.2347, 38.7837)),
+                ("101.2872", "-16.7161", (101.2872, -16.7161)),
+                ("00:42:44.33", "+41:16:07.32", (10.6847, 41.2687))):
+            got_ra, got_dec = self._cds_link_position_deg(ra, dec)
+            self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
+            self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
+
+    def test_hips2fits_url_matches_recorded_fetch(self):
+        """The URL builder reproduces the recorded reply's URL.
+
+        tests/fixtures/cds_hips2fits_m31.jpg was requested from the CDS
+        HiPS2FITS service with hips=DSS2%2Fcolor, 500 x 500, TAN, fov
+        0.25, M31's J2000 center, format jpg.
+        """
+        url = self.interp.evaljs(
+            "hips2fitsImageUrl(10.6847083, 41.26875)")
+        self.assertEqual(
+            url,
+            "https://alasky.cds.unistra.fr/hips-image-services/"
+            "hips2fits?hips=DSS2%2Fcolor&width=500&height=500"
+            "&projection=TAN&fov=0.25&ra=10.68471&dec=41.26875"
+            "&format=jpg")
+        url = self.interp.evaljs(
+            "hips2fitsImageUrl(101.2872, -16.7161)")
+        self.assertEqual(
+            url,
+            "https://alasky.cds.unistra.fr/hips-image-services/"
+            "hips2fits?hips=DSS2%2Fcolor&width=500&height=500"
+            "&projection=TAN&fov=0.25&ra=101.28720&dec=-16.71610"
+            "&format=jpg")
+
+
+CDS_FIXTURE = (Path(__file__).resolve().parent / "fixtures" /
+               "cds_hips2fits_m31.jpg")
+
+
+def _jpeg_sof0(data):
+    """Return (width, height, n_components) from a JPEG's first SOF0.
+
+    Walks the marker segments of a JPEG byte stream: each marker is FF
+    followed by a type; most carry a big-endian length, SOF0 (FF C0)
+    the precision, height, width and the component count.
+    """
+    i = 2
+    while i < len(data) - 1:
+        if data[i] != 0xFF:
+            raise ValueError("no JPEG marker at byte %d" % i)
+        while data[i + 1] == 0xFF:
+            i += 1
+        marker = data[i + 1]
+        if marker == 0xC0:
+            # precision byte, then height, width, component count
+            height = int.from_bytes(data[i + 5:i + 7], "big")
+            width = int.from_bytes(data[i + 7:i + 9], "big")
+            return width, height, data[i + 9]
+        if marker == 0xD9 or 0xD0 <= marker <= 0xD7 or marker == 0x01:
+            i += 2
+            continue
+        i += 2 + int.from_bytes(data[i + 2:i + 4], "big")
+    raise ValueError("SOF0 not found")
+
+
+class TestCdsHiPS2FITSFixture(unittest.TestCase):
+    """The archived CDS HiPS2FITS reply is the recorded M31 cutout.
+
+    Recorded 2026-11-28 00:07:56 UTC (HTTP 200, content-type
+    image/jpeg, content-disposition cutout-CDS_P_DSS2_color.jpg) from
+    https://alasky.cds.unistra.fr/hips-image-services/hips2fits
+    ?hips=DSS2%2Fcolor&width=500&height=500&projection=TAN&fov=0.25
+    &ra=10.6847083&dec=41.26875&format=jpg, saved unedited.
+    """
+
+    def test_reply_is_a_500x500_jpeg(self):
+        """The reply is a 3-component 500 x 500 JPEG, as recorded."""
+        data = CDS_FIXTURE.read_bytes()
+        self.assertEqual(data[:3], b"\xff\xd8\xff")
+        self.assertEqual(_jpeg_sof0(data), (500, 500, 3))
+
+    def test_m31_disk_is_in_the_cutout(self):
+        """The field is not blank sky: the M31 disk is present.
+
+        The center 60 x 60 median exceeds the mean of the four corner
+        40 x 40 box medians by more than 1.3 (measured 1.7 on the
+        recorded reply); the same field from SkyView's DSS copy, which
+        lacks M31, was flat (center-to-sky ratio 1.25).
+        """
+        if Image is None:
+            self.skipTest("Pillow not installed")
+        with Image.open(CDS_FIXTURE) as im:
+            gray = np.asarray(im.convert("L")).astype(float)
+        cy, cx = gray.shape[0] // 2, gray.shape[1] // 2
+        central = np.median(gray[cy - 30:cy + 30, cx - 30:cx + 30])
+        h, w = gray.shape
+        corners = [
+            np.median(gray[10:50, 10:50]),
+            np.median(gray[10:50, w - 50:w - 10]),
+            np.median(gray[h - 50:h - 10, 10:50]),
+            np.median(gray[h - 50:h - 10, w - 50:w - 10]),
+        ]
+        self.assertGreater(central / float(np.mean(corners)), 1.3)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
