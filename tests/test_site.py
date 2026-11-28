@@ -2101,8 +2101,10 @@ class FindingHoverLayoutTests(unittest.TestCase):
     flight). clearFindingInfo restores the placeholder in the left
     element and empties the right one. The star chart canvas, the
     sky image and the two panes stay the same shared size across
-    window resizes, even when the resize colds the star cache. The
-    clock is pinned to 2026-11-25T19:00Z.
+    window resizes, even when the resize colds the star cache. A
+    hover selects the nearest Simbad row drawn in the pane the
+    cursor is in, so a row queried past a pane's field never
+    steals the hover. The clock is pinned to 2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
@@ -2298,6 +2300,83 @@ class FindingHoverLayoutTests(unittest.TestCase):
             for key in ("canvas", "canvasH", "img", "imgH",
                         "paneL", "paneR"):
                 self.assertEqual(sizes[key], sizes["size"], key)
+
+    def test_image_hover_nearest_inside_image_field(self):
+        """Hovering the sky image selects the nearest star inside the
+        image's square field.
+
+        The star query pads the radius out to the canvas
+        half-diagonal (findingQueryRadius), so rows exist between
+        the image's square field and the canvas; such a row must not
+        win even when it is closer to the cursor, or a hover at the
+        image edge shows details and a star chart crosshair but no
+        crosshair on the image at all. With a 220 px canvas and the
+        7.5 arcmin display radius, the image half-field is 0.125 deg
+        and the canvas half-side is 110/102 of that.
+        """
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "$('finding-panes').clientWidth = 300;"
+            "$('finding-img').clientWidth = 220;"
+            "$('finding-img').clientHeight = 220;"
+            "findingHover.rows = ["
+            " { name: 'in-star', raDeg: 279.2347, dec: 38.8837,"
+            "   v: 2.0, distArcsec: 12.5 },"
+            " { name: 'edge-star', raDeg: 279.2347, dec: 38.9117,"
+            "   v: 1.0, distArcsec: 25.5 } ]; 0")
+        interp.evaljs(
+            "$('finding-img').dispatchEvent("
+            "{ type: 'mousemove', clientX: 110, clientY: 0 }); 0")
+        out = interp.evaljs(
+            "JSON.stringify({ name: findingChartHighlight &&"
+            " findingChartHighlight.name,"
+            " imgPt: findingImgHighlightPt,"
+            " chartPt: findingChartHighlightPt,"
+            " left: $('finding-nearest').innerHTML })")
+        info = json.loads(out)
+        self.assertEqual(info["name"], "in-star")
+        self.assertIn("Nearest: in-star", info["left"])
+        self.assertIsNotNone(info["imgPt"])
+        self.assertIsNotNone(info["chartPt"])
+
+    def test_chart_hover_nearest_inside_canvas(self):
+        """Hovering the star chart selects the nearest star drawn on
+        the canvas.
+
+        The queried rows reach the query circle, past the canvas
+        square's corners (findingQueryRadius); a row in that ring
+        must not win even when it is closer to the cursor, or a
+        hover near the canvas edge shows details but no crosshair.
+        With a 220 px canvas and the 7.5 arcmin display radius the
+        canvas half-side is 110/102 of 0.125 deg in dec and that
+        over cos(dec) in ra; the query circle is 7.5 arcmin times
+        sqrt(2) times 110/102 (11.4 arcmin).
+        """
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "$('finding-panes').clientWidth = 300;"
+            "findingHover.rows = ["
+            " { name: 'edge-row', raDeg: 279.2347 + 0.160,"
+            "   dec: 38.8137, v: 2.0, distArcsec: 20.5 },"
+            " { name: 'outer-row', raDeg: 279.2347 + 0.176,"
+            "   dec: 38.8137, v: 1.0, distArcsec: 26.5 } ]; 0")
+        out = interp.evaljs(
+            "var size = findingCanvasSize();"
+            "var scale = (size / 2 - 8) / d2r(7.5 / 60);"
+            "var p = gnomonicProject(279.2347 + 0.169, 38.8137,"
+            " 279.2347, 38.7837);"
+            "updateFindingInfo(size / 2 - p.x * scale,"
+            " size / 2 - p.y * scale);"
+            "JSON.stringify({ name: findingChartHighlight &&"
+            " findingChartHighlight.name,"
+            " chartPt: findingChartHighlightPt,"
+            " left: $('finding-nearest').innerHTML })")
+        info = json.loads(out)
+        self.assertEqual(info["name"], "edge-row")
+        self.assertIn("Nearest: edge-row", info["left"])
+        self.assertIsNotNone(info["chartPt"])
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
