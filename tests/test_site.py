@@ -2104,7 +2104,7 @@ class FindingHoverLayoutTests(unittest.TestCase):
     window resizes, even when the resize colds the star cache. A
     hover selects the nearest Simbad row drawn in the pane the
     cursor is in, so a row queried past a pane's field never
-    steals the hover. The clock is pinned to 2026-11-25T19:00Z.
+    steals the hover. The sky image's RA offset is signed (west negative), so a star west of the target still answers to the hover on either pane. The clock is pinned to 2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
@@ -2376,6 +2376,78 @@ class FindingHoverLayoutTests(unittest.TestCase):
         info = json.loads(out)
         self.assertEqual(info["name"], "edge-row")
         self.assertIn("Nearest: edge-row", info["left"])
+        self.assertIsNotNone(info["chartPt"])
+
+    def test_image_hover_west_of_center(self):
+        """Hovering a star west of the target still selects it.
+
+        The image's linear pixel scale takes the RA offset signed
+        (west negative); wrap360 wraps a negative offset to near
+        360 degrees, so a west row read as a half-turn away was
+        excluded from the image hover and its crosshair clamped off
+        the image: only stars east of the target answered. The
+        cursor sits on the west row's image pixel.
+        """
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "$('finding-panes').clientWidth = 300;"
+            "$('finding-img').clientWidth = 220;"
+            "$('finding-img').clientHeight = 220;"
+            "findingHover.rows = ["
+            " { name: 'west-star', raDeg: 279.2347 - 0.0167,"
+            "   dec: 38.7837, v: 2.0, distArcsec: 97.0 },"
+            " { name: 'center-star', raDeg: 279.2347, dec: 38.7837,"
+            "   v: 1.0, distArcsec: 5.0 } ];"
+            "var size = findingCanvasSize();"
+            "var fov = findingHover.radiusArcmin / 30;"
+            "var ix = size / 2 + 0.0167 * Math.cos(d2r(38.7837))"
+            " / fov * size;"
+            "$('finding-img').dispatchEvent("
+            "{ type: 'mousemove', clientX: ix, clientY: size / 2 }); 0")
+        out = interp.evaljs(
+            "JSON.stringify({ name: findingChartHighlight &&"
+            " findingChartHighlight.name,"
+            " imgPt: findingImgHighlightPt,"
+            " chartPt: findingChartHighlightPt,"
+            " left: $('finding-nearest').innerHTML })")
+        info = json.loads(out)
+        self.assertEqual(info["name"], "west-star")
+        self.assertIn("Nearest: west-star", info["left"])
+        self.assertIsNotNone(info["imgPt"])
+        self.assertGreater(info["imgPt"]["x"], 110)
+        self.assertIsNotNone(info["chartPt"])
+
+    def test_chart_hover_west_of_center_marks_image(self):
+        """A chart hover on a star west of the target marks the image.
+
+        The star chart projects gnomonically, so its crosshair was
+        always right; the image overlay used wrap360 for the RA
+        offset, which clamped the same star off the image, so only
+        the chart showed the crosshair for a west star.
+        """
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "$('finding-panes').clientWidth = 300;"
+            "findingHover.rows = ["
+            " { name: 'west-star', raDeg: 279.2347 - 0.0167,"
+            "   dec: 38.7837, v: 2.0, distArcsec: 97.0 } ];"
+            "var size = findingCanvasSize();"
+            "var scale = (size / 2 - 8) / d2r(7.5 / 60);"
+            "var p = gnomonicProject(279.2347 - 0.0167, 38.7837,"
+            " 279.2347, 38.7837);"
+            "updateFindingInfo(size / 2 - p.x * scale,"
+            " size / 2 - p.y * scale); 0")
+        out = interp.evaljs(
+            "JSON.stringify({ name: findingChartHighlight &&"
+            " findingChartHighlight.name,"
+            " imgPt: findingImgHighlightPt,"
+            " chartPt: findingChartHighlightPt })")
+        info = json.loads(out)
+        self.assertEqual(info["name"], "west-star")
+        self.assertIsNotNone(info["imgPt"])
+        self.assertGreater(info["imgPt"]["x"], 110)
         self.assertIsNotNone(info["chartPt"])
 
 

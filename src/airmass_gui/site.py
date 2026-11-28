@@ -554,6 +554,25 @@ footer li { margin-bottom: 0.2rem; }
  * @returns {number} Equivalent angle in [0, 360).
  */
 function wrap360(x) { return ((x % 360) + 360) % 360; }
+
+/**
+ * Signed angular difference a - b, wrapped to [-180, 180).
+ *
+ * wrap360 returns [0, 360), so a small negative offset comes back
+ * near 360 degrees; use this where the offset feeds a linear
+ * small-angle mapping (the sky image's pixel scale) instead of an
+ * absolute angle, where wrap360 is right.
+ *
+ * @param {number} a - First angle, degrees.
+ * @param {number} b - Second angle, degrees.
+ * @returns {number} a - b wrapped to [-180, 180), degrees.
+ */
+function signedDeltaDeg(a, b) {
+  var d = (a - b) % 360;
+  if (d >= 180) d -= 360;
+  if (d < -180) d += 360;
+  return d;
+}
 /**
  * Convert degrees to radians.
  *
@@ -6716,9 +6735,11 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
  * the target's J2000 position (north up, east left,
  * hips2fitsImageUrl; the image's own mousemove uses the same
  * mapping), so the object's pixel position follows from its angular
- * offset from the center. The mark is drawn only while the image is
- * shown and the object is inside the square field; the overlay is
- * cleared otherwise.
+ * offset from the center. The RA offset is signed, west negative
+ * (signedDeltaDeg), so a star on either side of the target maps to
+ * the right side of the cutout. The mark is drawn only while the
+ * image is shown and the object is inside the square field; the
+ * overlay is cleared otherwise.
  *
  * @returns {void} Draws or clears #finding-img-overlay and sets
  *     findingImgHighlightPt to the crosshair's position in CSS px
@@ -6742,7 +6763,7 @@ function drawFindingImageOverlay() {
     return;
   }
   var fovDeg = hover.radiusArcmin / 30;
-  var dRa = wrap360(highlight.raDeg - hover.center.raDeg) *
+  var dRa = signedDeltaDeg(highlight.raDeg, hover.center.raDeg) *
             Math.cos(d2r(hover.center.dec));
   var dDec = highlight.dec - hover.center.dec;
   var x = size / 2 - dRa / fovDeg * size;
@@ -6861,7 +6882,9 @@ function refreshFindingDetail() {
  * half-diagonal (findingQueryRadius), so "nearest" is restricted to
  * the rows drawn in pane when one is given: "chart" the canvas
  * square, "image" the sky image's square field (twice the display
- * radius across). Without a pane every queried row is eligible.
+ * radius across, the RA offset signed (signedDeltaDeg) so stars
+ * west of the center are not read as a half-turn away. Without a
+ * pane every queried row is eligible.
  *
  * @param {Object} pos - Sky position {raDeg, dec} in degrees.
  * @param {string} [pane] - Pane the cursor is in, "chart" or
@@ -6892,7 +6915,7 @@ function updateFindingInfoAt(pos, pane) {
   } else if (pane === "image") {
     var fovDeg = hover.radiusArcmin / 30;
     eligible = function (row) {
-      var dRa = wrap360(row.raDeg - hover.center.raDeg) *
+      var dRa = signedDeltaDeg(row.raDeg, hover.center.raDeg) *
                 Math.cos(d2r(hover.center.dec));
       var dDec = row.dec - hover.center.dec;
       return Math.abs(dRa) <= fovDeg / 2 && Math.abs(dDec) <= fovDeg / 2;
