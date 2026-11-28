@@ -59,7 +59,7 @@ CORE_FUNCTIONS = [
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
     "findingStarSize",
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
-    "skyViewPosition", "skyViewQueryUrl", "hips2fitsImageUrl",
+    "hips2fitsImageUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
     "weatherSymbolKind", "wmoText", "wmoIcon",
     "blendHex",
@@ -357,9 +357,9 @@ class SitePageTests(unittest.TestCase):
         # The page must be self-contained: no external assets may be loaded.
         # (The Simbad mirror URLs are a runtime opt-in API call; the mirrors
         # send Access-Control-Allow-Origin: *, so nothing is embedded. The
-        # SkyView quick-query link and the CDS HiPS2FITS cutout link in the
-        # finding chart are likewise runtime opt-ins: each opens in a new
-        # tab only when the user clicks it, so nothing is embedded.)
+        # finding chart's sky image is likewise a runtime opt-in: the CDS
+        # HiPS2FITS cutout is requested only when the Finding chart
+        # checkbox is on, and the page ships without an img src.)
         for token in ("<script src", "<link ", "@import", "url(",
                       "<iframe", "<object", "<embed"):
             self.assertNotIn(token, self.page)
@@ -445,10 +445,10 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        zoom slider and survey selector, a star-chart canvas, the SkyView
-        page link, the CDS DSS2 color cutout link, the Simbad coo
-        lookup, and a resizable panel with a fixed hover-info column on
-        the right of the chart."""
+        zoom slider, a star-chart canvas, the inline CDS DSS2 color sky
+        image with its new-tab link, the Simbad coo lookup, and a
+        resizable panel with a fixed hover-info column on the right of
+        the chart."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -458,40 +458,26 @@ class SitePageTests(unittest.TestCase):
             self.page)
         self.assertIn('id="finding-zoom-label"', self.page)
         self.assertIn('<canvas id="finding-chart"></canvas>', self.page)
-        self.assertIn('<select id="finding-survey">', self.page)
-        self.assertIn('<a id="finding-skylink" href="#" target="_blank"',
+        self.assertIn('<img id="finding-img" alt="DSS2 color sky image">',
                       self.page)
+        self.assertIn('id="finding-img-status"', self.page)
         self.assertIn('<a id="finding-cdslink" href="#" target="_blank"',
                       self.page)
         self.assertIn('id="finding-panes"', self.page)
         self.assertIn('flex: 1 1 180px', self.page)
-        self.assertIn('<option value="Digitized Sky Survey" selected>DSS</option>',
-                      self.page)
-        self.assertIn('<option value="HEAO 1 A-2">HEAO 1 (X-ray)</option>',
-                      self.page)
-        self.assertIn('<option value="RASS-Cnt Broad">RASS (X-ray)</option>',
-                      self.page)
-        self.assertIn('<option value="TESS">TESS</option>', self.page)
-        self.assertIn('<option value="IRAS 100 micron">IRAS 100&mu;m</option>',
-                      self.page)
-        self.assertIn('<option value="0408MHz">0408 MHz</option>', self.page)
+        self.assertNotIn('<select id="finding-survey">', self.page)
         self.assertNotIn('<select id="finding-radius">', self.page)
         self.assertIn('function findingRadiusFromZoom(', self.page)
         self.assertIn('function updateFindingZoomLabel(', self.page)
         self.assertIn('function liveFindingZoom(', self.page)
         self.assertIn('$("finding-zoom").addEventListener("input"',
                       self.page)
-        self.assertIn('function skyViewPosition(', self.page)
-        self.assertIn('function skyViewQueryUrl(', self.page)
         self.assertIn('function hips2fitsImageUrl(', self.page)
         self.assertIn('hips2fitsImageUrl(c.raDeg, c.dec)', self.page)
-        self.assertIn(
-            'skyViewQueryUrl($("finding-survey").value, c.raDeg, c.dec)',
-            self.page)
-        self.assertIn('function findingRadiusText(', self.page)
-        self.assertIn('skyview.gsfc.nasa.gov/current/cgi/runquery.pl',
+        self.assertIn('img.src = imgUrl', self.page)
+        self.assertIn('$("finding-img").addEventListener("error"',
                       self.page)
-        self.assertIn('Sky image (SkyView)', self.page)
+        self.assertIn('function findingRadiusText(', self.page)
         self.assertIn('function updateFindingChart(', self.page)
         self.assertIn('id="finding-info"', self.page)
         self.assertIn("Hover the star chart for object info", self.page)
@@ -517,15 +503,16 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('function findingOffsetText(', self.page)
         self.assertIn('function findingDetailTable(', self.page)
-        self.assertNotIn('id="finding-img"', self.page)
-        # No image is fetched inline from CDS; the DSS2 color
-        # cutout is a link the user opens in a new tab.
+        # The cutout is fetched at runtime: the page ships without an
+        # img src, without a SkyView link, and without the survey option.
+        self.assertNotIn('<img src', self.page)
         self.assertNotIn('src="https://alasky', self.page)
         self.assertNotIn('src="https://aladin', self.page)
+        self.assertNotIn("skyview", self.page.lower())
+        self.assertNotIn("findingSurvey", self.page)
         self.assertNotIn('function hpxHash(', self.page)
         self.assertNotIn('function updateFindingImage(', self.page)
         self.assertNotIn('function drawCutoutOverlay(', self.page)
-        self.assertIn('findingSurvey: "Digitized Sky Survey"', self.page)
         self.assertIn('function simbadCooLookup(', self.page)
         self.assertIn('function drawFindingChart(', self.page)
         self.assertIn('function findingQueryUrl(', self.page)
@@ -847,14 +834,14 @@ class SecurityPageTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
-class SkyViewPositionTests(unittest.TestCase):
-    """The SkyView link is centered on the target's J2000 position.
+class CdsSkyImageTests(unittest.TestCase):
+    """The finding chart's sky image centers on the J2000 position.
 
-    SkyView's quick interface works in J2000, so the link must carry
-    the J2000 position that objCoords returns, not the precessed
-    equinox-of-date position; precessing shifts the image center by
-    the precession (10.7 arcmin for Vega on 2026-11-25), which puts
-    the target outside the returned field.
+    The CDS HiPS2FITS cutout is requested at J2000, so the inline img
+    and its new-tab link must carry the J2000 position that objCoords
+    returns, not the precessed equinox-of-date position; precessing
+    shifts the image center by the precession (10.7 arcmin for Vega
+    on 2026-11-25), which puts the target outside the returned field.
     """
 
     @classmethod
@@ -882,8 +869,8 @@ class SkyViewPositionTests(unittest.TestCase):
         cls.interp.evaljs(stubs + ";" + chr(10) + "0")
         cls.interp.evaljs(script + ";" + chr(10) + "0")
 
-    def _link_position_deg(self, ra, dec):
-        """Return the link's Position parsed back to (raDeg, decDeg)."""
+    def _img_position_deg(self, ra, dec):
+        """Return the inline image's center parsed back to degrees."""
         self.interp.evaljs(
             "state = normalizeState({ observatory: {"
             " name: 'Mount Graham (LBT)', lat: 32.70131,"
@@ -898,28 +885,28 @@ class SkyViewPositionTests(unittest.TestCase):
             "$('finding-zoom').value = '640';"
             "updateFindingChart();"
         )
-        href = self.interp.evaljs(
-            "JSON.stringify($('finding-skylink').href)")
-        pos = urllib.parse.unquote(
-            re.search(r"[?&]Position=([^&]+)", href).group(1))
-        ra_half, dec_half = pos.split(" ")
-        ra_deg = ((int(ra_half[0:2]) + int(ra_half[2:4]) / 60 +
-                   float(ra_half[4:]) / 3600) * 15) % 360
-        sign = -1 if dec_half[0] == "-" else 1
-        dec_deg = sign * (int(dec_half[1:3]) + int(dec_half[3:5]) / 60 +
-                          float(dec_half[5:]) / 3600)
-        return ra_deg, dec_deg
+        src = self.interp.evaljs(
+            "JSON.stringify($('finding-img').src)")
+        ra_raw = urllib.parse.unquote(
+            re.search(r"[?&]ra=([^&]+)", src).group(1))
+        dec_raw = urllib.parse.unquote(
+            re.search(r"[?&]dec=([^&]+)", src).group(1))
+        return float(ra_raw), float(dec_raw)
 
-    def test_skylink_center_is_j2000(self):
-        """Vega, Sirius and M31 link within 1 arcsec of J2000."""
-        # J2000 positions per the audit reference (degrees).
+    def test_img_src_is_cds_cutout(self):
+        """The inline image and its new-tab link share one URL, and
+        center within 1 arcsec of J2000 for Vega, Sirius and M31."""
         for ra, dec, (want_ra, want_dec) in (
                 ("279.2347", "38.7837", (279.2347, 38.7837)),
                 ("101.2872", "-16.7161", (101.2872, -16.7161)),
                 ("00:42:44.33", "+41:16:07.32", (10.6847, 41.2687))):
-            got_ra, got_dec = self._link_position_deg(ra, dec)
+            got_ra, got_dec = self._img_position_deg(ra, dec)
             self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
             self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
+            same = self.interp.evaljs(
+                "JSON.stringify($('finding-img').src === "
+                "$('finding-cdslink').href)")
+            self.assertEqual(same, "true")
 
     def _cds_link_position_deg(self, ra, dec):
         """Return the CDS cutout link's center parsed back to degrees."""
@@ -978,6 +965,31 @@ class SkyViewPositionTests(unittest.TestCase):
             "hips2fits?hips=DSS2%2Fcolor&width=500&height=500"
             "&projection=TAN&fov=0.25&ra=101.28720&dec=-16.71610"
             "&format=jpg")
+
+    def test_img_error_shows_unavailable(self):
+        """A failed image load says the image is unavailable, hides the
+        img, and leaves the new-tab link in place."""
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "t", "ra": "279.2347", "dec": "38.7837"}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '640';"
+            "updateFindingChart();"
+            "$('finding-img').dispatchEvent({ type: 'error' });"
+        )
+        status = json.loads(self.interp.evaljs(
+            "JSON.stringify($('finding-img-status').textContent)"))
+        self.assertIn("unavailable", status)
+        display = json.loads(self.interp.evaljs(
+            "JSON.stringify($('finding-img').style.display)"))
+        self.assertEqual(display, "none")
 
 
 CDS_FIXTURE = (Path(__file__).resolve().parent / "fixtures" /
