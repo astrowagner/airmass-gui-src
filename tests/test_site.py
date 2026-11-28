@@ -4627,6 +4627,20 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertEqual(
             self._js("weatherSymbolKind({prec: 0, wc: null, pp: 40})"), "rain")
 
+    def test_finding_star_size(self):
+        """findingStarSize scales the marker radius with V magnitude.
+
+        The radius grows as the star gets brighter, capped at 7 px
+        for a V = 0 star and floored at 1.8 px so the faintest
+        markers stay visible; an unknown magnitude gets the 1.8 px
+        floor.
+        """
+        self.assertAlmostEqual(self._js("findingStarSize(0)"), 5.8, places=6)
+        self.assertAlmostEqual(self._js("findingStarSize(5)"), 4.0, places=6)
+        self.assertAlmostEqual(self._js("findingStarSize(10)"), 2.2, places=6)
+        self.assertAlmostEqual(self._js("findingStarSize(15)"), 1.8, places=6)
+        self.assertAlmostEqual(self._js("findingStarSize(null)"), 1.8, places=6)
+
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class SimbadLinkTests(unittest.TestCase):

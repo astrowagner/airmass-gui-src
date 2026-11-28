@@ -2550,11 +2550,11 @@ function simbadCooParse(text) {
  *
  * @param {?number} v - V magnitude; null or non-finite for unknown.
  * @returns {number} Marker radius in px, brighter stars larger
- *     (5.2 - 0.38 v, clamped to [1.2, 6]); 1.2 for unknown.
+ *     (5.8 - 0.36 v, clamped to [1.8, 7]); 1.8 for unknown.
  */
 function findingStarSize(v) {
-  if (v == null || !isFinite(v)) return 1.2;
-  return Math.max(1.2, Math.min(6, 5.2 - 0.38 * v));
+  if (v == null || !isFinite(v)) return 1.8;
+  return Math.max(1.8, Math.min(7, 5.8 - 0.36 * v));
 }
 
 /**
@@ -6729,7 +6729,7 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
     }
     ctx.fillStyle = THEME.fg;
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, st.v != null ? findingStarSize(st.v) : 1.2,
+    ctx.arc(pt.x, pt.y, findingStarSize(st.v),
             0, 2 * Math.PI);
     ctx.fill();
     st.__drawn = true;
