@@ -27,6 +27,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from . import __version__
 from .chart import (
     PALETTE,
     SHADE,
@@ -538,7 +539,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
 </details>
-<p class="credit">Airmass chart by K. Wagner (UArizona) &middot; <a href="http://kevinwagner.space">kevinwagner.space</a> &middot; <a href="https://github.com/astrowagner/airmass-gui-src">source</a> &middot; <a href="https://github.com/astrowagner/airmass-gui-src/blob/main/LICENSE">MIT licensed</a></p>
+<p class="credit">Airmass chart v__VERSION__ by K. Wagner (UArizona) &middot; <a href="http://kevinwagner.space">kevinwagner.space</a> &middot; <a href="https://github.com/astrowagner/airmass-gui-src">source</a> &middot; <a href="https://github.com/astrowagner/airmass-gui-src/blob/main/LICENSE">MIT licensed</a></p>
 </footer>
 </div>
 <script>
@@ -7537,9 +7538,9 @@ def build_site(data: dict, out_path: str | Path) -> Path:
     """Write the workspace as an interactive single-file HTML page.
 
     The page carries the workspace as its initial state, plus the
-    observatory presets, the palette, the color themes, and the
-    twilight shading recipes, and embeds the whole chart engine as
-    JavaScript. For a first visit and on Reset, the page centers that
+    observatory presets, the package version in the footer credit, the
+    palette, the color themes, and the twilight shading recipes, and
+    embeds the whole chart engine as JavaScript. For a first visit and on Reset, the page centers that
     range on tonight's local midnight, keeping its duration; a state
     from a shared link or the browser's storage keeps its own start.
 
@@ -7558,6 +7559,7 @@ def build_site(data: dict, out_path: str | Path) -> Path:
     obs = from_dict(data.get("observatory", {}))
     page = _TEMPLATE
     page = page.replace("__OBS_NAME__", html.escape(str(obs.name)))
+    page = page.replace("__VERSION__", __version__)
     page = page.replace("__GENERATED__", datetime.now().isoformat(timespec="seconds"))
     page = page.replace("__INITIAL__", _js_json(data))
     page = page.replace("__OBSERVATORIES__", _js_json([to_dict(p) for p in PRESETS.values()]))

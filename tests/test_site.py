@@ -24,7 +24,7 @@ from astropy.coordinates import AltAz, EarthLocation, SkyCoord, TETE, get_body, 
 from astropy.io import fits
 from astropy.time import Time
 
-from airmass_gui import astro, chart, lookup
+from airmass_gui import __version__, astro, chart, lookup
 from airmass_gui.observatories import PRESETS, RENAME_MAP, to_dict
 from airmass_gui.site import THEMES, _blend_hex, build_site
 from airmass_gui.workspace import load, new_workspace, save
@@ -277,6 +277,16 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<a href="http://kevinwagner.space">kevinwagner.space</a>', self.page)
         self.assertIn('href="https://github.com/astrowagner/airmass-gui-src"', self.page)
         self.assertIn("MIT", self.page)
+
+    def test_footer_carries_version(self):
+        """The footer credit carries the package's version.
+
+        The version is airmass_gui.__version__, embedded at build
+        time, so a rebuilt page always names the version it was
+        built from.
+        """
+        self.assertIn("Airmass chart v%s by K. Wagner (UArizona)"
+                      % __version__, self.page)
 
     def test_chart_navigation_controls(self):
         """The chart has a horizontal scrollbar, zoom buttons, a bottom-edge
