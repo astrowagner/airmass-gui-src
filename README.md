@@ -63,8 +63,10 @@ hourly overlay when the Weather checkbox is on, and the daily Weather
 report panel when the Weather report checkbox is on), CDS Simbad name
 lookups and finding-chart
 object queries, the CDS HiPS2FITS DSS2-color cutout shown inline in the
-finding chart (with a scale bar and a link to open the same image in a
-new tab), and the weather services behind the Weather report.
+finding chart (with a scale bar), and the weather services behind the
+Weather report. Target names, the star chart's caption, and the
+encircled crosshair on a hovered finding-chart object each open the
+object's CDS Simbad name-search page in a new tab.
 The chart, calendar, and summary work offline. Open the page
 directly in a browser or drop the file into a GitHub Pages repository.
 
@@ -106,6 +108,8 @@ agree with the desktop app to ~0.01 deg (the difference is the omitted
 nutation). The **Simbad** button in the Targets panel looks a name up in CDS
 Simbad (mirrors tried in order), fills in the coordinates, and adds the target;
 that lookup needs internet access.
+Target names are links to their CDS Simbad name-search pages (new tab);
+double-click a name to rename it in place (Enter or blur saves, Esc cancels).
 
 ## Update
 

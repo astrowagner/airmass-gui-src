@@ -378,6 +378,7 @@ Intl = {
 var __els = {}, __winHandlers = {};
 var __clips = [], __confirms = [], __prompts = [], __execCmds = [];
 var __blobs = [], __dataUrls = [], __lastReplaceUrl = null;
+var __opened = [];
 
 function __parseFlatHtml(html) {
   var els = [];
@@ -416,6 +417,7 @@ function __makeEl(tag, id) {
   el.setAttribute = function (k, v) { this[k] = v; };
   el.getAttribute = function (k) { return (k in this) ? this[k] : null; };
   el.hasAttribute = function (k) { return k in this; };
+  el.removeAttribute = function (k) { delete this[k]; };
   el.addEventListener = function (type, fn) { this.__handlers[type] = fn; };
   el.dispatchEvent = function (ev) {
     var h = this.__handlers && this.__handlers[ev.type];
@@ -521,7 +523,11 @@ window = {
   },
   addEventListener: function (type, fn) { __winHandlers[type] = fn; },
   confirm: function (msg) { __confirms.push(msg); return true; },
-  prompt: function (msg) { __prompts.push(msg); return "Smoke WS"; }
+  prompt: function (msg) { __prompts.push(msg); return "Smoke WS"; },
+  open: function (url, target, features) {
+    __opened.push([String(url), target || "", features || ""]);
+    return {};
+  }
 };
 
 localStorage = {

@@ -6,8 +6,10 @@ embedded JavaScript, and every control on the page is live. The page uses the
 network only for the optional live services: open-meteo weather (the hourly chart overlay and the daily weather report), CDS Simbad
 name/coordinate lookups and finding-chart object queries, and the CDS
 HiPS2FITS DSS2-color cutout, shown inline in the finding chart with a
-scale bar and a link to open the same image in a new tab; the cutout's
-field of view tracks the chart's diameter. The workspace passed in
+scale bar; the cutout's field of view tracks the chart's diameter.
+Target names, the star chart's caption, and the encircled crosshair on
+a hovered finding-chart object each open the object's CDS Simbad
+name-search page in a new tab. The workspace passed in
 becomes the initial state; user edits persist in the browser via localStorage,
 and the page can export the workspace back to a JSON file the desktop app can
 open.
@@ -214,6 +216,11 @@ button:hover { background: var(--button-hover); }
 .target-row .info { font-size: 0.75rem; color: var(--fg-dim); cursor: pointer;
                     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .target-row .info:hover { color: var(--fg); }
+.target-row .nm { color: var(--fg); cursor: pointer;
+                  text-decoration: none; white-space: nowrap;
+                  overflow: hidden; text-overflow: ellipsis; }
+.target-row .nm:hover { color: var(--accent); text-decoration: underline; }
+.target-row .nm.dim { color: var(--fg-dim); }
 .target-row .rm { border: none; background: transparent; color: var(--fg-dim);
                   font-size: 1.05rem; padding: 0; }
 .target-row .rm:hover { color: var(--error); }
@@ -237,8 +244,6 @@ input[type="checkbox"] { flex: none; }
 .finding-scale-bar { height: 3px; background: var(--fg); margin-top: 2px; }
 .finding-caption { font-size: 0.75rem; color: var(--fg-dim); text-align: center;
                    margin-top: 0.25rem; }
-.finding-link { text-align: center; padding: 0.75rem 0; font-size: 0.85rem; }
-.finding-link a { color: var(--accent); text-decoration: none; }
 #finding-status { min-height: 1.15em; font-size: 0.8rem; color: var(--fg-dim);
                   margin-top: 0.3rem; }
 #finding-nearest { margin-top: 0.6rem; font-size: 0.72rem; line-height: 1.4;
@@ -451,7 +456,7 @@ footer li { margin-bottom: 0.2rem; }
     </div>
     <div id="finding-panes">
       <div class="finding-pane" id="finding-chart-pane">
-        <div class="finding-caption">Star chart</div>
+        <div class="finding-caption">Star chart <a id="finding-simlink" target="_blank" rel="noopener"></a></div>
         <canvas id="finding-chart"></canvas>
         <div id="finding-nearest"><span class="finding-dim">Hover the star chart or the sky image for object info</span></div>
       </div>
@@ -463,8 +468,6 @@ footer li { margin-bottom: 0.2rem; }
           <div id="finding-scale-bar" class="finding-scale-bar"></div>
         </div>
         <div id="finding-img-status" class="finding-caption"></div>
-        <div class="finding-link"><a id="finding-cdslink" href="#" target="_blank"
-            rel="noopener">open the image in a new tab</a></div>
         <div id="finding-details"></div>
       </div>
     </div>
@@ -495,7 +498,7 @@ footer li { margin-bottom: 0.2rem; }
 <li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night; the 1 / 2 / 3 buttons set the duration to one, two, or three days; the Night of dropdown jumps the range to any local night from yesterday through two weeks ahead (each entry gives the night's best target altitude and the Moon's illumination at its closing midnight).</li>
 <li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold, the shaded usable bands, and the per-night list; Moon, the twilight overlays, Weather, Weather report, and Extra info toggle their features.</li>
 <li><b>Panel order</b>: the small up/down arrows at the right end of each window's title move that window one slot up or down within its column (the sidebar windows among themselves, the main-column windows among themselves), skipping hidden windows; the arrows are disabled at the ends. The order is per-page only; it returns to the built-in layout on reload or Reset.</li>
-<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
+<li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the name is a link to the object's CDS Simbad page (opens in a new tab; double-click renames it in place, Enter saves, Esc cancels); the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
 <li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; the &#9678; button expands the time range until the current time sits exactly at its center, mirroring the longer of the before-now and after-now portions onto the shorter side; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
 <li><b>Observing windows</b>: per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, the Moon's phase at mid-night and its rise and set that night (or whether it stays up or down all night), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
 <li><b>Annual calendar</b>: twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
@@ -522,7 +525,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Weather report (hidden by default; enable it with the Weather report checkbox in the Display panel): the current conditions at the observatory, then one row per day for eight days \u2014 condition and its display symbol, min and max temperature, maximum rain chance, mean cloud cover, maximum wind, and the Moon's illumination at the day's closing midnight \u2014 with links to the underlying weather services, including the Meteoblue meteogram for the site's coordinates (needs internet; fetched from open-meteo and cached for one hour; the links open in new tabs).</li>
 <li>Moon symbols: a glyph at each local midnight shows the Moon&rsquo;s phase, with its illumination in percent beside it; always shown, independent of the Moon curve.</li>
 <li>Targets: with Extra info checked, a Target details window under the rows shows each target's full Simbad record (magnitudes in all bands, spectral type, parallax with its uncertainty and the inverted distance, proper motion, radial velocity, and identifiers); a row's status text shows the stored ephemeris point count, and clicking its cross clears the record and ephemeris.</li>
-<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, N / E arrows, north up, east left, and a cross on each other workspace target, names to the left of the crosses), plus an inline sky image: a DSS2 color cutout generated by the CDS HiPS2FITS service (up to 15&prime; across at about 1.8&Prime; per pixel; needs internet), a scale bar below it, and a link to open the same image in a new tab and a note that the image is unavailable if the service does not reply with one; the chart and the image are centered on the target&rsquo;s J2000 position, so they agree, and the cutout&rsquo;s field of view is twice the chart&rsquo;s radius, so the two cover the same field; the chart and the image are the same fixed size, and each window grows taller, not wider, as its info tables fill in; hovering the star chart or the sky image shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name and angular offset from the cursor (the nearest object is marked on the star chart with an encircled crosshair in the theme&rsquo;s highlight color, red in dark and light, white in red/night), with its basic fields below the star chart (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts) and its record fields below the sky image (parallax with uncertainty, distance, proper motion, radial velocity, and identifiers), a dash in a row the object lacks; the record fields come from a second Simbad lookup by name, shown as a "querying" row while in flight (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure);; the star query pads the radius out to the square canvas&rsquo;s diagonal, so the whole canvas is covered; the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 7.5&prime;, the sky image&rsquo;s maximum field (15&prime; across), with the current radius shown beside it, the chart re-scaling live as the slider moves and the sky image re-fetching to match.</li>
+<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, N / E arrows, north up, east left, and a cross on each other workspace target, names to the left of the crosses), plus an inline sky image: a DSS2 color cutout generated by the CDS HiPS2FITS service (up to 15&prime; across at about 1.8&Prime; per pixel; needs internet), a scale bar below it, and a note that the image is unavailable if the service does not reply with one; the chart and the image are centered on the target&rsquo;s J2000 position, so they agree, and the cutout&rsquo;s field of view is twice the chart&rsquo;s radius, so the two cover the same field; the chart and the image are the same fixed size, and each window grows taller, not wider, as its info tables fill in; hovering the star chart or the sky image shows the equatorial coordinates under the cursor and, for the nearest Simbad object, its name and angular offset from the cursor (the nearest object is marked on the star chart with an encircled crosshair in the theme&rsquo;s highlight color, red in dark and light, white in red/night), with its basic fields below the star chart (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts) and its record fields below the sky image (parallax with uncertainty, distance, proper motion, radial velocity, and identifiers), a dash in a row the object lacks; the record fields come from a second Simbad lookup by name, shown as a "querying" row while in flight (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure);; the star chart&rsquo;s caption links the selected target to its CDS Simbad name-search page (opens in a new tab), clicking the encircled crosshair opens the hovered object&rsquo;s page (new tab), and target names in the Targets panel open the same pages; the star query pads the radius out to the square canvas&rsquo;s diagonal, so the whole canvas is covered; the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 7.5&prime;, the sky image&rsquo;s maximum field (15&prime; across), with the current radius shown beside it, the chart re-scaling live as the slider moves and the sky image re-fetching to match.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass as seen from the observatory (topocentric position, geocentric position plus diurnal parallax) and the tooltip adds its altitude, illumination fraction, phase name, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
@@ -2626,8 +2629,8 @@ function findingScaleArcmin(fovArcmin) {
  *     field at maximum zoom-out.
  * @returns {string} URL of the JPEG cutout. The caller shows the
  *     reply inline in the finding pane with a scale bar
- *     (findingScaleArcmin), offers the same URL as a new-tab link,
- *     and says the image is unavailable when the load fails.
+ *     (findingScaleArcmin) and says the image is unavailable when
+ *     the load fails.
  */
 function hips2fitsImageUrl(raDeg, decDeg, fovDeg) {
   var fov = (fovDeg == null) ? FINDING_FOV_MAX_DEG : fovDeg;
@@ -3345,6 +3348,11 @@ function renderTargetDetails() {
 
 /**
  * Rebuild the per-target edit rows.
+ *
+ * The name cell is a link to the object's CDS Simbad name-search page
+ * (simbadNameUrl, new tab); an unnamed object shows a dim "Target"
+ * and reports instead. Double-clicking the name renames it in place
+ * (startNameEdit): Enter or blur commits, Esc cancels.
  */
 function renderTargets() {
   var box = $("targets");
@@ -3355,7 +3363,7 @@ function renderTargets() {
     row.className = "target-row";
     row.innerHTML =
       '<input type="color" title="Color">' +
-      '<input placeholder="Name" title="Name">' +
+      '<a class="nm" target="_blank" rel="noopener" title="Open in CDS Simbad (new tab); double-click to rename"></a>' +
       '<input placeholder="RA (h m s / h:m:s / deg)" title="RA">' +
       '<input placeholder="Dec (d m s / d:m:s / deg)" title="Dec">' +
       '<input placeholder="V mag" title="V magnitude" inputmode="decimal">' +
@@ -3364,13 +3372,35 @@ function renderTargets() {
       '<button class="rm" title="Remove" type="button">&#215;</button>';
     var kids = row.children;
     kids[0].value = /^#[0-9a-fA-F]{6}$/.test(obj.color || "") ? obj.color : PALETTE[i % PALETTE.length];
-    kids[1].value = obj.name || "";
+    var nm = obj.name ? String(obj.name).trim() : "";
+    kids[1].textContent = nm || "Target";
+    if (!nm) kids[1].className = "nm dim";
+    if (nm) kids[1].href = simbadNameUrl(nm);
+    var nameOpenTimer = null;
+    kids[1].addEventListener("click", function () {
+      if (!nm) {
+        setStatus("Give this target a name to link it to CDS Simbad");
+        return;
+      }
+      // Delay the open so a double-click can rename instead.
+      if (nameOpenTimer != null) clearTimeout(nameOpenTimer);
+      nameOpenTimer = setTimeout(function () {
+        nameOpenTimer = null;
+        window.open(simbadNameUrl(nm), "_blank", "noopener");
+      }, 300);
+    });
+    kids[1].addEventListener("dblclick", function () {
+      if (nameOpenTimer != null) {
+        clearTimeout(nameOpenTimer);
+        nameOpenTimer = null;
+      }
+      startNameEdit(obj, kids[1]);
+    });
     kids[2].value = obj.ra || "";
     kids[3].value = obj.dec || "";
     kids[4].value = isFinite(obj.mag) ? obj.mag : "";
     kids[5].textContent = targetInfoText(obj);
     kids[0].addEventListener("input", function () { obj.color = this.value; afterTargetChange(); });
-    kids[1].addEventListener("input", function () { obj.name = this.value; afterTargetChange(); });
     kids[2].addEventListener("input", function () { obj.ra = this.value; delete obj.ephemeris; afterTargetChange(); });
     kids[3].addEventListener("input", function () { obj.dec = this.value; delete obj.ephemeris; afterTargetChange(); });
     kids[4].addEventListener("input", function () {
@@ -3439,6 +3469,44 @@ function renderTargets() {
   });
   refreshFindingTargets();
   renderTargetDetails();
+}
+
+/**
+ * Rename a target in place from its name link.
+ *
+ * Swaps the anchor for a text input carrying the current name; Enter
+ * or blur commits (trimmed; an empty name unnames the target) and
+ * Esc cancels, keeping the old name; either way the row re-renders.
+ *
+ * @param {Object} obj - The target in state.objects.
+ * @param {Element} cell - The name anchor in its row.
+ * @returns {void}
+ */
+function startNameEdit(obj, cell) {
+  var input = document.createElement("input");
+  input.placeholder = "Name";
+  input.title = "Name (Enter saves, Esc cancels)";
+  input.value = obj.name ? String(obj.name).trim() : "";
+  input.focus();
+  input.select();
+  var done = false;
+  var finish = function (commit) {
+    if (done) return;
+    done = true;
+    if (commit) {
+      var nm = String(input.value).trim();
+      if (nm) obj.name = nm; else delete obj.name;
+    }
+    renderTargets();
+    afterTargetChange();
+  };
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") finish(true);
+    else if (e.key === "Escape") finish(false);
+  });
+  input.addEventListener("blur", function () { finish(true); });
+  cell.parentElement.insertBefore(input, cell);
+  cell.remove();
 }
 
 /**
@@ -5976,6 +6044,23 @@ var SIMBAD_ENDPOINTS = [
 ];
 
 /**
+ * CDS Simbad name-search page URL for a target name.
+ *
+ * The primary mirror's sim-id path with sim-basic in its place and the
+ * name as the Ident parameter; sim-basic lists every object whose
+ * name matches, so an ambiguous name still lands on its results page.
+ * The URL shape was verified against the live service on 2026-11-27
+ * (HTTP 200 results pages for Ident=VEGA and Ident=M%2031).
+ *
+ * @param {string} name - Target name, trimmed by the caller.
+ * @returns {string} Fully formed name-search URL.
+ */
+function simbadNameUrl(name) {
+  return SIMBAD_ENDPOINTS[0].replace("/sim-id", "/sim-basic") +
+         "?Ident=" + encodeURIComponent(name);
+}
+
+/**
  * Fetch a SIMBAD mirror response as text, with a 30 s timeout.
  *
  * @param {string} url - Fully formed SIMBAD query URL.
@@ -6368,6 +6453,7 @@ var findingDetailsPending = {}; // object name -> true while its sim-id query is
 var findingLastHover = null;  // {px, py, name} of the last chart hover
 var findingChartHighlight = null;  // row shown in the encircled crosshair
 var findingChartHighlightKey = null; // "name|raDeg|dec" of that row
+var findingChartHighlightPt = null; // canvas px of that crosshair
 var lastDetailQueryAt = 0;    // Date.now() of the last detail-query start
 var DETAIL_THROTTLE_MS = 1500;      // min gap between detail queries, ms
 var DETAIL_FAIL_TTL_MS = 10 * 60000; // retry a failed lookup after this, ms
@@ -6480,6 +6566,10 @@ function layoutFindingPanes(size) {
  * @param {Object} [highlight] - sim-coo row to mark with an encircled
  *     crosshair in THEME.highlight (the object whose details the hover
  *     panel shows); null or omitted for no mark.
+ *
+ * @returns {void} Draws #finding-chart and sets findingChartHighlightPt
+ *     to the crosshair's canvas position (null when the mark is off or
+ *     out of field) for the canvas click handler.
  */
 function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
                           highlight) {
@@ -6570,9 +6660,11 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
   arrow(cx, cy - R + 22, cx, cy - R + 6, "N", cx + 8, cy - R + 10);
   arrow(cx - R + 22, cy, cx - R + 6, cy, "E", cx - R + 4, cy + 14);
   // Encircled crosshair on the hovered object (in the field only).
+  findingChartHighlightPt = null;
   if (highlight) {
     var hp = proj(highlight.raDeg, highlight.dec);
     if (hp && inside(hp)) {
+      findingChartHighlightPt = hp;
       ctx.strokeStyle = THEME.highlight;
       ctx.lineWidth = 1.25;
       ctx.beginPath();
@@ -6749,6 +6841,22 @@ function updateFindingInfo(px, py) {
 }
 
 /**
+ * Point the star chart caption's Simbad link at a target name.
+ *
+ * @param {string} name - Trimmed target name; empty string clears the
+ *     link (the href attribute is removed, so a click does nothing).
+ * @returns {void} Sets #finding-simlink's text, href, target and rel.
+ */
+function setFindingSimLink(name) {
+  var link = $("finding-simlink");
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = name || "";
+  if (name) link.href = simbadNameUrl(name);
+  else link.removeAttribute("href");
+}
+
+/**
  * Reset the finding-chart hover info to its placeholder text.
  *
  * Also removes the encircled crosshair: when a mark is shown, the
@@ -6783,9 +6891,10 @@ function clearFindingInfo() {
  * responses. No-op while the option is off.
  *
  * @returns {void} Draws #finding-chart (J2000), points the inline sky
- *     image (#finding-img, hips2fitsImageUrl at twice the radius)
- *     and its new-tab link (#finding-cdslink) at the target's J2000
- *     position, fixes both panes and the image to the shared square
+ *     image (#finding-img, hips2fitsImageUrl at twice the radius) and the
+ *     caption link (#finding-simlink, simbadNameUrl) at the target's
+ *     J2000 position and name, fixes both panes and the image to the
+ *     shared square
  *     (findingCanvasSize, layoutFindingPanes) so the chart and image
  *     keep the same size, sizes the scale bar (#finding-scale) to
  *     the cutout's field,
@@ -6799,6 +6908,7 @@ function updateFindingChart() {
   if (state.objects.length === 0) {
     status.textContent = "Add a target to draw a finding chart";
     findingHover = null;
+    setFindingSimLink("");
     $("finding-scale").style.display = "none";
     return;
   }
@@ -6806,11 +6916,13 @@ function updateFindingChart() {
   var i = Math.min(parseInt(sel.value, 10) || 0, state.objects.length - 1);
   var obj = state.objects[i];
   var label = obj.name || "Target " + (i + 1);
+  setFindingSimLink(obj.name ? String(obj.name).trim() : "");
   var c;
   try { c = objCoords(obj, Date.now()); }
   catch (err) {
     status.textContent = "Target has no usable coordinates";
     findingHover = null;
+    setFindingSimLink("");
     $("finding-scale").style.display = "none";
     return;
   }
@@ -6819,7 +6931,6 @@ function updateFindingChart() {
   var size = findingCanvasSize();
   var queryRadius = findingQueryRadius(radiusArcmin, size);
   layoutFindingPanes(size);
-  var cdsl = $("finding-cdslink");
   var img = $("finding-img");
   img.style.width = size + "px";
   img.style.height = size + "px";
@@ -6832,9 +6943,6 @@ function updateFindingChart() {
     $("finding-img-status").textContent = "";
     img.src = imgUrl;
   }
-  cdsl.href = imgUrl;
-  cdsl.title = ("Open the DSS2 color image for " + label +
-                " (J2000) in a new tab");
   var fovArcmin = radiusArcmin * 2.0;
   var scaleArcmin = findingScaleArcmin(fovArcmin);
   $("finding-scale-label").textContent = scaleArcmin + "\u2032";
@@ -6937,13 +7045,25 @@ $("finding-img").addEventListener("error", function () {
   this.style.display = "none";
   $("finding-scale").style.display = "none";
   $("finding-img-status").textContent =
-    "Sky image unavailable \u2014 open the image in a new tab with the link";
+    "Sky image unavailable \u2014 the CDS service did not reply with one";
 });
 $("finding-chart").addEventListener("mousemove", function (e) {
   var r = this.getBoundingClientRect();
   updateFindingInfo(e.clientX - r.left, e.clientY - r.top);
 });
 $("finding-chart").addEventListener("mouseleave", clearFindingInfo);
+// A click on the encircled crosshair (15 px reach, its outer tick)
+// opens that object's CDS Simbad name-search page in a new tab.
+$("finding-chart").addEventListener("click", function (e) {
+  var pt = findingChartHighlightPt;
+  var row = findingChartHighlight;
+  if (!pt || !row || !row.name) return;
+  var r = this.getBoundingClientRect();
+  var dx = e.clientX - r.left - pt.x, dy = e.clientY - r.top - pt.y;
+  if (dx * dx + dy * dy <= 225) {
+    window.open(simbadNameUrl(String(row.name).trim()), "_blank", "noopener");
+  }
+});
 // The sky image shows the same north-up, east-left field as the
 // chart: its field of view is twice the display radius
 // (hips2fitsImageUrl), square. Map the cursor linearly over the

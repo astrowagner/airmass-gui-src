@@ -449,10 +449,11 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        zoom slider, a star-chart canvas with the hover's
+        zoom slider, a star-chart canvas (its caption linking the
+        selected target to CDS Simbad) with the hover's
         nearest-object line and basic-field table below it, the inline
-        CDS DSS2 color sky image with its new-tab link and the
-        hover's record-expansion table below it, the Simbad coo
+        CDS DSS2 color sky image and the hover's record-expansion
+        table below it, the Simbad coo
         lookup, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
@@ -466,8 +467,10 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('<img id="finding-img" alt="DSS2 color sky image">',
                       self.page)
         self.assertIn('id="finding-img-status"', self.page)
-        self.assertIn('<a id="finding-cdslink" href="#" target="_blank"',
-                      self.page)
+        self.assertIn(
+            '<a id="finding-simlink" target="_blank" rel="noopener">',
+            self.page)
+        self.assertNotIn('finding-cdslink', self.page)
         self.assertIn('id="finding-panes"', self.page)
         self.assertIn('flex: 1 1 180px', self.page)
         self.assertNotIn('<select id="finding-survey">', self.page)
@@ -552,7 +555,7 @@ class SitePageTests(unittest.TestCase):
         self.assertLess(img, details)
         # Both panes lead with their caption line, so the two
         # squares start on the same row and sit evenly side by side.
-        star_caption = self.page.index('>Star chart<')
+        star_caption = self.page.index('>Star chart <a id="finding-simlink"')
         sky_caption = self.page.index('Sky image (DSS2 color, CDS)')
         self.assertLess(star_caption, chart)
         self.assertLess(sky_caption, img)
@@ -951,51 +954,13 @@ class CdsSkyImageTests(unittest.TestCase):
         return float(ra_raw), float(dec_raw)
 
     def test_img_src_is_cds_cutout(self):
-        """The inline image and its new-tab link share one URL, and
-        center within 1 arcsec of J2000 for Vega, Sirius and M31."""
+        """The inline image centers within 1 arcsec of J2000 for
+        Vega, Sirius and M31."""
         for ra, dec, (want_ra, want_dec) in (
                 ("279.2347", "38.7837", (279.2347, 38.7837)),
                 ("101.2872", "-16.7161", (101.2872, -16.7161)),
                 ("00:42:44.33", "+41:16:07.32", (10.6847, 41.2687))):
             got_ra, got_dec = self._img_position_deg(ra, dec)
-            self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
-            self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
-            same = self.interp.evaljs(
-                "JSON.stringify($('finding-img').src === "
-                "$('finding-cdslink').href)")
-            self.assertEqual(same, "true")
-
-    def _cds_link_position_deg(self, ra, dec):
-        """Return the CDS cutout link's center parsed back to degrees."""
-        self.interp.evaljs(
-            "state = normalizeState({ observatory: {"
-            " name: 'Mount Graham (LBT)', lat: 32.70131,"
-            " lon: -109.88906, elevation_m: 3221.0,"
-            " timezone: 'America/Phoenix',"
-            " preset: 'Mount Graham (LBT)' },"
-            " objects: " + json.dumps(
-                [{"name": "t", "ra": ra, "dec": dec}]) + ","
-            " options: { finding: true },"
-            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
-            "$('finding-target').value = '0';"
-            "$('finding-zoom').value = '640';"
-            "updateFindingChart();"
-        )
-        href = self.interp.evaljs(
-            "JSON.stringify($('finding-cdslink').href)")
-        ra_raw = urllib.parse.unquote(
-            re.search(r"[?&]ra=([^&]+)", href).group(1))
-        dec_raw = urllib.parse.unquote(
-            re.search(r"[?&]dec=([^&]+)", href).group(1))
-        return float(ra_raw), float(dec_raw)
-
-    def test_cdslink_center_is_j2000(self):
-        """Vega, Sirius and M31 cutouts center within 1 arcsec of J2000."""
-        for ra, dec, (want_ra, want_dec) in (
-                ("279.2347", "38.7837", (279.2347, 38.7837)),
-                ("101.2872", "-16.7161", (101.2872, -16.7161)),
-                ("00:42:44.33", "+41:16:07.32", (10.6847, 41.2687))):
-            got_ra, got_dec = self._cds_link_position_deg(ra, dec)
             self.assertAlmostEqual(got_ra % 360, want_ra, delta=1.0 / 3600)
             self.assertAlmostEqual(got_dec, want_dec, delta=1.0 / 3600)
 
@@ -4004,6 +3969,214 @@ class JsCoreNumericTests(unittest.TestCase):
             self._js("weatherSymbolKind({prec: 0, wc: 2, pp: 30}) === null"))
         self.assertEqual(
             self._js("weatherSymbolKind({prec: 0, wc: null, pp: 40})"), "rain")
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class SimbadLinkTests(unittest.TestCase):
+    """Target names and the finding chart link out to CDS Simbad.
+
+    The Targets panel's name cell is an anchor to the sim-basic
+    name-search page on the primary Simbad mirror (new tab;
+    double-click renames in place, Enter or blur commits, Esc
+    cancels). The star chart's caption carries the same link for
+    the selected target, and a click on the hovered object's
+    encircled crosshair opens that object's page. The DSS2 pane no
+    longer offers an open-image-in-a-new-tab link. The URL shape
+    (simbad.cfa.harvard.edu/simbad/sim-basic?Ident=...) was checked
+    against the live service on 2026-11-27: HTTP 200 results pages
+    for Ident=VEGA and Ident=M%2031.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__",
+                              json.dumps(sorted(set(
+                                  re.findall(r'id="([^"]+)"', cls.page)))))
+                     .replace("__TZ_TABLE__",
+                              json.dumps({"UTC": 0, "America/Phoenix": -7}))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+
+    def _interp(self):
+        """Page interpreter (real clock; no service replies needed)."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _state(self, interp, objects):
+        interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(objects) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } }); 0")
+
+    @staticmethod
+    def _url(name):
+        return ("https://simbad.cfa.harvard.edu/simbad/sim-basic"
+                "?Ident=" + quote(name, safe=""))
+
+    def _rows(self, interp):
+        """The target rows as plain data (stub elements are not
+        JSON-serializable: they carry parentElement cycles)."""
+        return json.loads(interp.evaljs(
+            "JSON.stringify($('targets').children.map(function (row) {"
+            " return row.children.map(function (c) {"
+            "  return { tag: c.tagName, text: c.textContent,"
+            "           value: c.value, href: c.href != null"
+            "             ? c.href : null, target: c.target || '',"
+            "           rel: c.rel || '' };"
+            " }); }))"))
+
+    def _simlink(self, interp):
+        """The star chart caption's Simbad link as plain data."""
+        return json.loads(interp.evaljs(
+            "JSON.stringify((function (l) {"
+            " return { text: l.textContent,"
+            "          href: l.href != null ? l.href : null,"
+            "          target: l.target || '' };"
+            "})($('finding-simlink')))"))
+
+    def test_target_name_is_simbad_link(self):
+        """A named row's name cell is a sim-basic link; an unnamed
+        row shows a dim 'Target', carries no href, and reports on
+        click."""
+        interp = self._interp()
+        self._state(interp, [
+            {"name": "Vega", "ra": "18:36:56.3", "dec": "+38:47:01.5"},
+            {"ra": "17:56:00", "dec": "+38:47:00"}])
+        interp.evaljs("renderTargets(); 0")
+        rows = self._rows(interp)
+        name0 = rows[0][1]
+        self.assertEqual(name0["tag"], "A")
+        self.assertEqual(name0["text"], "Vega")
+        self.assertEqual(name0["href"], self._url("Vega"))
+        self.assertEqual(name0["target"], "_blank")
+        self.assertEqual(name0["rel"], "noopener")
+        name1 = rows[1][1]
+        self.assertEqual(name1["text"], "Target")
+        self.assertIsNone(name1["href"])
+        interp.evaljs(
+            "$('targets').children[1].children[1]"
+            ".dispatchEvent({type: 'click'}); 0")
+        status = json.loads(
+            interp.evaljs("JSON.stringify($('status').textContent)"))
+        self.assertIn("name", status)
+
+    def test_target_name_doubleclick_renames(self):
+        """Double-click swaps the name link for an input; Enter
+        commits and Esc cancels, and the row re-renders the link."""
+        interp = self._interp()
+        self._state(interp, [{"name": "Vega", "ra": "18:36:56.3",
+                              "dec": "+38:47:01.5"}])
+        interp.evaljs("renderTargets(); 0")
+        interp.evaljs(
+            "$('targets').children[0].children[1]"
+            ".dispatchEvent({type: 'dblclick'}); 0")
+        cell = self._rows(interp)[0][1]
+        self.assertEqual(cell["tag"], "INPUT")
+        self.assertEqual(cell["value"], "Vega")
+        interp.evaljs(
+            "var inp = $('targets').children[0].children[1];"
+            " inp.value = 'Altair';"
+            " inp.dispatchEvent({type: 'keydown', key: 'Enter'}); 0")
+        self.assertEqual(
+            json.loads(interp.evaljs(
+                "JSON.stringify(state.objects[0].name)")), "Altair")
+        cell = self._rows(interp)[0][1]
+        self.assertEqual(cell["tag"], "A")
+        self.assertEqual(cell["href"], self._url("Altair"))
+        interp.evaljs(
+            "$('targets').children[0].children[1]"
+            ".dispatchEvent({type: 'dblclick'}); 0")
+        interp.evaljs(
+            "var inp = $('targets').children[0].children[1];"
+            " inp.value = 'Nope';"
+            " inp.dispatchEvent({type: 'keydown', key: 'Escape'}); 0")
+        self.assertEqual(
+            json.loads(interp.evaljs(
+                "JSON.stringify(state.objects[0].name)")), "Altair")
+
+    def test_star_chart_caption_simbad_link(self):
+        """The star chart caption links the selected target to CDS
+        Simbad and clears when the target is unnamed or absent."""
+        interp = self._interp()
+        self._state(interp, [{"name": "Vega", "ra": "18:36:56.3",
+                              "dec": "+38:47:01.5"}])
+        interp.evaljs(
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "updateFindingChart(); 0")
+        link = self._simlink(interp)
+        self.assertEqual(link["text"], "Vega")
+        self.assertEqual(link["href"], self._url("Vega"))
+        self.assertEqual(link["target"], "_blank")
+        interp.evaljs(
+            "state.objects.push({ra: '17:56:00', dec: '+38:47:00'});"
+            "$('finding-target').value = '1';"
+            "updateFindingChart(); 0")
+        link = self._simlink(interp)
+        self.assertEqual(link["text"], "")
+        self.assertIsNone(link["href"])
+        self._state(interp, [])
+        interp.evaljs("updateFindingChart(); 0")
+        link = self._simlink(interp)
+        self.assertEqual(link["text"], "")
+        self.assertIsNone(link["href"])
+
+    def test_crosshair_click_opens_simbad(self):
+        """A click on the hovered object's encircled crosshair opens
+        that object's CDS Simbad page; other clicks do not."""
+        interp = self._interp()
+        self._state(interp, [{"name": "Vega", "ra": "18:36:56.3",
+                              "dec": "+38:47:01.5"}])
+        interp.evaljs(
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "var fcsize = findingCanvasSize();"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, fcsize);"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: ["
+            "  { name: 'Vega', raDeg: c.raDeg, dec: c.dec, v: 0.03 } ],"
+            " count: 1 };"
+            "updateFindingChart();"
+            "updateFindingInfo(fcsize / 2, fcsize / 2); 0")
+        interp.evaljs(
+            "var ev = { type: 'click', clientX: fcsize / 2,"
+            " clientY: fcsize / 2 };"
+            " $('finding-chart').dispatchEvent(ev); 0")
+        self.assertEqual(
+            json.loads(interp.evaljs("JSON.stringify(__opened)")),
+            [[self._url("Vega"), "_blank", "noopener"]])
+        interp.evaljs(
+            "var ev = { type: 'click', clientX: 30, clientY: 30 };"
+            " $('finding-chart').dispatchEvent(ev); 0")
+        self.assertEqual(
+            len(json.loads(interp.evaljs("JSON.stringify(__opened)"))), 1)
+
+    def test_image_new_tab_link_removed(self):
+        """The DSS2 pane no longer offers an open-in-new-tab link."""
+        self.assertNotIn("finding-cdslink", self.page)
+        self.assertNotIn("open the image in a new tab", self.page)
+        self.assertNotIn(".finding-link", self.page)
 
 
 if __name__ == "__main__":
