@@ -446,10 +446,10 @@ class SitePageTests(unittest.TestCase):
 
     def test_finding_chart_ui(self):
         """The Display panel offers a finding chart: checkbox, target,
-        zoom slider, a star-chart canvas, the inline CDS DSS2 color sky
-        image with its new-tab link, the Simbad coo lookup, and a
-        resizable panel with a fixed hover-info column on the right of
-        the chart."""
+        zoom slider, a star-chart canvas with the hover's
+        nearest-object line below it, the inline CDS DSS2 color sky
+        image with its new-tab link and the hover's detail table below
+        it, the Simbad coo lookup, and a resizable panel."""
         self.assertIn(
             '<input id="finding-chk" type="checkbox">', self.page)
         self.assertIn('<div class="panel" id="finding-panel"', self.page)
@@ -495,9 +495,14 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('function findingRadiusText(', self.page)
         self.assertIn('function updateFindingChart(', self.page)
-        self.assertIn('id="finding-info"', self.page)
-        self.assertIn("Hover the star chart or the sky image for object info",
-                      self.page)
+        self.assertIn('id="finding-nearest"', self.page)
+        self.assertIn('id="finding-details"', self.page)
+        self.assertNotIn('id="finding-info"', self.page)
+        self.assertNotIn('fi-wrap', self.page)
+        self.assertIn(
+            'id="finding-nearest"><span class="finding-dim">Hover the'
+            ' star chart or the sky image for object info</span></div>',
+            self.page)
         self.assertIn('function updateFindingInfo(', self.page)
         self.assertIn('function clearFindingInfo(', self.page)
         self.assertIn('$("finding-chart").addEventListener("mousemove"',
@@ -507,9 +512,6 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('$("finding-img").addEventListener("mouseleave"',
                       self.page)
         self.assertIn('function updateFindingInfoAt(', self.page)
-        self.assertIn('fi-wrap', self.page)
-        self.assertIn('fi-left', self.page)
-        self.assertIn('fi-right', self.page)
         self.assertIn('findingQueryRadius(radiusArcmin, size)', self.page)
         self.assertIn('simbadCooLookup(c.raDeg, c.dec, queryRadius)',
                       self.page)
@@ -522,13 +524,23 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('.finding-pane:last-child { flex: 1 1 300px; }',
                       self.page)
-        self.assertIn('#finding-info { flex: 1 1 auto; min-height: 8.8rem;'
+        self.assertIn('#finding-details { flex: 1 1 auto; min-height: 8.8rem;'
                       ' overflow-y: auto;', self.page)
-        self.assertIn('#finding-info td { overflow-wrap: break-word; }',
+        self.assertIn('#finding-details td { overflow-wrap: break-word; }',
                       self.page)
         self.assertIn('INFO_RESERVE_PX', self.page)
-        self.assertIn('#finding-info table { border-collapse: collapse;',
+        self.assertIn('#finding-details table { border-collapse: collapse;',
                       self.page)
+        # The collapsed line (cursor position, nearest name and offset)
+        # sits in the left pane below the star chart; only the detail
+        # table sits in the right pane below the sky image.
+        chart = self.page.index('id="finding-chart"')
+        nearest = self.page.index('id="finding-nearest"')
+        img = self.page.index('id="finding-img"')
+        details = self.page.index('id="finding-details"')
+        self.assertLess(chart, nearest)
+        self.assertLess(nearest, img)
+        self.assertLess(img, details)
         self.assertIn('function findingOffsetText(', self.page)
         self.assertIn('function findingDetailTable(', self.page)
         # The cutout is fetched at runtime: the page ships without an
@@ -1788,6 +1800,106 @@ class PanelOrderTests(unittest.TestCase):
         self.assertEqual(orders["main"],
                          ["chart-box", "finding-panel", "summary-panel",
                           "calendar-panel", "wxreport-panel"])
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class FindingHoverLayoutTests(unittest.TestCase):
+    """The finding chart's hover info is split across the two panes.
+
+    The collapsed line — the cursor position and, when a row is
+    available, the nearest object's name and angular offset from the
+    cursor — renders below the star chart (#finding-nearest, left
+    pane); only the expansion, findingDetailTable's field table,
+    renders below the sky image (#finding-details, right pane).
+    clearFindingInfo restores the placeholder in the left element and
+    empties the right one. The clock is pinned to 2026-11-25T19:00Z.
+    """
+
+    NOW = int(datetime(2026, 11, 25, 19, 0,
+                       tzinfo=timezone.utc).timestamp() * 1000)
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        cls.stubs = (STUBS
+                     .replace("__ALL_IDS__", json.dumps(all_ids))
+                     .replace("__TZ_TABLE__", json.dumps(tz_table))
+                     .replace("__SIMBAD_BODY__", json.dumps(""))
+                     .replace("__OPEN_METEO_BODY__",
+                              json.dumps(json.dumps({}))))
+        cls.script = script
+
+    def _interp(self):
+        """Page interpreter with the clock pinned at self.NOW."""
+        interp = dukpy.JSInterpreter()
+        interp.evaljs(self.stubs + ";" + chr(10) + "0")
+        interp.evaljs("Date.now = function () { return %d; }; 0"
+                      % self.NOW)
+        interp.evaljs(self.script + ";" + chr(10) + "0")
+        return interp
+
+    def _setup_hover(self, interp):
+        """Pinned LBT state with a one-row findingHover for Vega."""
+        interp.evaljs(
+            "state = normalizeState({"
+            " observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{\"name\": \"Vega\", \"ra\": \"18:36:56.3\","
+            " \"dec\": \"+38:47:01.5\"}],"
+            " options: { windows: true, calendar: true, threshold: 2.0,"
+            " finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1 } });"
+            "syncAllControls(); 0")
+        interp.evaljs(
+            "findingHover = { center: { raDeg: 279.2347, dec: 38.7837 },"
+            " rows: [{ name: 'Vega', raDeg: 279.2347, dec: 38.7837,"
+            " v: 0.03, distArcsec: 12.5 }],"
+            " radiusArcmin: 7.5, label: 'Vega', centerIdx: 0 }; 0")
+
+    def test_hover_line_under_chart_table_under_image(self):
+        """updateFindingInfoAt puts the cursor + nearest line in
+        #finding-nearest and the detail table in #finding-details."""
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "updateFindingInfoAt({ raDeg: 279.235, dec: 38.784 }); 0")
+        left = interp.evaljs('JSON.stringify($("finding-nearest").innerHTML)')
+        right = interp.evaljs('JSON.stringify($("finding-details").innerHTML)')
+        self.assertIn("Cursor:", left)
+        self.assertIn("Nearest: Vega", left)
+        self.assertIn("from cursor", left)
+        self.assertNotIn("from cursor", right)
+        self.assertIn("<table>", right)
+        self.assertNotIn("<table>", left)
+
+    def test_clear_finding_info_split(self):
+        """clearFindingInfo restores the placeholder under the chart
+        and empties the detail element under the image."""
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "updateFindingInfoAt({ raDeg: 279.235, dec: 38.784 }); 0")
+        interp.evaljs("clearFindingInfo(); 0")
+        left = interp.evaljs('JSON.stringify($("finding-nearest").innerHTML)')
+        right = interp.evaljs('JSON.stringify($("finding-details").innerHTML)')
+        self.assertIn(
+            "Hover the star chart or the sky image for object info", left)
+        self.assertEqual(right, '""')
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

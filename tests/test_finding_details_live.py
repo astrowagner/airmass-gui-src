@@ -55,15 +55,15 @@ async function __main() {
     centerIdx: 0
   };
   updateFindingInfo(240, 240);
-  __probe.pendingShown = $("finding-info").innerHTML
+  __probe.pendingShown = $("finding-details").innerHTML
       .indexOf("querying Simbad") !== -1;
   for (var q = 0; q < 200
        && Object.keys(findingDetailsPending).length > 0; q++)
     await Promise.resolve();
-  __probe.html = $("finding-info").innerHTML;
+  __probe.html = $("finding-details").innerHTML;
   __probe.simbadUrls = __simbadUrls();
   updateFindingInfo(240, 240);
-  __probe.html2 = $("finding-info").innerHTML;
+  __probe.html2 = $("finding-details").innerHTML;
   __probe.simbadUrls2 = __simbadUrls();
 }
 
