@@ -948,6 +948,97 @@ class SecurityPageTests(unittest.TestCase):
         self.assertNotIn(placeholder, calendar)
 
 
+class UsableBandsToggleTests(unittest.TestCase):
+    """The per-target usable-window bands have their own toggle.
+
+    The bands shade the view window where each target is at or below
+    the airmass threshold. They are on by default and can be turned
+    off with the Usable bands checkbox (state.options.bands) without
+    touching the Windows option, which keeps the dashed threshold
+    line, the transit ticks, and the per-night list.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in json.loads(
+                re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                          script, re.S).group(1)):
+            tz_table.setdefault(o["timezone"], -7)
+        om_body = json.loads(json.dumps({
+            "latitude": 32.70131, "longitude": -109.88906,
+            "timezone": "America/Phoenix", "timezone_abbreviation": "MST",
+            "utc_offset_seconds": -25200, "elevation": 3221.0,
+            "generationtime_ms": 0.1, "hourly_units": {},
+            "hourly": {"time": [], "cloud_cover": [],
+                       "precipitation_probability": []},
+        }))
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__",
+                          json.dumps(json.dumps(om_body))))
+        cls.interp = dukpy.JSInterpreter()
+        cls.interp.evaljs(stubs + ";\n0")
+        cls.interp.evaljs(script + ";\n0")
+
+    def _set_state(self, objects, options=None):
+        """Load a one-target state at the LBT preset."""
+        code = (
+            "state = normalizeState({ observatory: { name: 'Mount Graham (LBT)',"
+            " lat: 32.70131, lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(objects) + ","
+            " options: " + json.dumps(options or {}) + ","
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+        )
+        self.interp.evaljs(code)
+
+    def test_page_has_bands_checkbox(self):
+        """The Display panel has the Usable bands checkbox."""
+        self.assertIn('id="bands-chk"', self.page)
+
+    def test_bands_toggle_controls_the_bands(self):
+        """options.bands = false stops the target-colored bands.
+
+        The bands are full-plot-height fillRects in each target's
+        color; the transit ticks are the same color but only 8 px
+        tall, so they keep being drawn with Windows on.
+        """
+        self._set_state(
+            [{"name": "Vega", "ra": "18:36:56.3", "dec": "38:47:01.5"}],
+            options={"windows": True, "curve": "airmass"})
+        self.interp.evaljs(
+            "__ctx.__rects = []; var __origFillRect = __ctx.fillRect;"
+            " __ctx.fillRect = function (x, y, w, h) {"
+            "   __ctx.__rects.push({ h: h, style: __ctx.fillStyle });"
+            "   __origFillRect.apply(__ctx, arguments); }; 0")
+
+        def bands():
+            self.interp.evaljs("__ctx.__rects = [];")
+            self.interp.evaljs("draw();")
+            rects = json.loads(self.interp.evaljs(
+                "JSON.stringify(__ctx.__rects)"))
+            color = json.loads(self.interp.evaljs(
+                "JSON.stringify(state.objects[0].color)"))
+            return [r for r in rects if r["style"] == color and r["h"] > 50]
+
+        self.assertTrue(bands(),
+                        "bands are drawn with the default options")
+        self.interp.evaljs("state.options.bands = false;")
+        self.assertEqual(bands(), [],
+                         "bands are still drawn with options.bands = false")
+
+
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class CdsSkyImageTests(unittest.TestCase):
     """The finding chart's sky image centers on the J2000 position.

@@ -389,6 +389,7 @@ footer li { margin-bottom: 0.2rem; }
   <div class="panel" id="panel-display">
     <h2>Display</h2>
     <label class="field"><span>Windows</span><input id="windows-chk" type="checkbox" checked></label>
+    <label class="field"><span>Usable bands</span><input id="bands-chk" type="checkbox" checked></label>
     <label class="field"><span>Max airmass</span><input id="threshold" type="number" step="0.1" min="1.05"></label>
     <label class="field"><span>Curve</span><select id="curve-sel">
       <option value="airmass">Airmass</option>
@@ -507,7 +508,7 @@ footer li { margin-bottom: 0.2rem; }
 <ul>
 <li><b>Observatory</b>: pick a preset or enter latitude, longitude, and elevation; the time zone dropdown lists common zones (the current zone is preselected).</li>
 <li><b>Time range</b>: the start date in local time and the number of days shown; the Today button centers the window on the current night; the 1 / 2 / 3 buttons set the duration to one, two, or three days; the Night of dropdown jumps the range to any local night from yesterday through two weeks ahead (each entry gives the night's best target altitude and the Moon's illumination at its closing midnight).</li>
-<li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold, the shaded usable bands, and the per-night list; Moon, the twilight overlays, Weather, Weather report, and Extra info toggle their features.</li>
+<li><b>Display</b>: curve mode (airmass, altitude, or azimuth); Windows adds the airmass threshold line, the transit ticks, and the per-night list; Usable bands toggles the shaded bands showing when each target is at or below the threshold; Moon, the twilight overlays, Weather, Weather report, and Extra info toggle their features.</li>
 <li><b>Panel order</b>: the small up/down arrows at the right end of each window's title move that window one slot up or down within its column (the sidebar windows among themselves, the main-column windows among themselves), skipping hidden windows; the arrows are disabled at the ends. The order is per-page only; it returns to the built-in layout on reload or Reset.</li>
 <li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the name is a link to the object's CDS Simbad page (opens in a new tab; double-click renames it in place, Enter saves, Esc cancels); the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
 <li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; the &#9678; button expands the time range until the current time sits exactly at its center, mirroring the longer of the before-now and after-now portions onto the shorter side; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
@@ -530,7 +531,7 @@ footer li { margin-bottom: 0.2rem; }
 <li>Sharing: the URL encodes the full workspace (&#35;w= fragment) — Copy link in the Workspace panel copies it, and opening it loads that exact setup.</li>
 <li>Workspaces: save named copies in this browser (stored as {state, saved}; copies saved by older versions without a save time keep their name only as the label and still load), import an exported JSON file, or download the chart as a PNG image (Export JSON keeps the desktop-app file shape).</li>
 <li>Now: when the current time falls in the displayed window, a red vertical line with a filled circle at the top of the chart marks it.</li>
-<li>Windows: the dashed line marks your airmass threshold; shaded bands show when each target is usable, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold, the Moon's phase (illumination and name) at mid-night, that night's Moon rise and set in local time (or a note that the Moon stays up or down for the whole day's part), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
+<li>Windows: the dashed line marks your airmass threshold, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold, the Moon's phase (illumination and name) at mid-night, that night's Moon rise and set in local time (or a note that the Moon stays up or down for the whole day's part), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
 <li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
 <li>Weather (hidden by default; enable it with the Weather checkbox in the Display panel): the cloud band fills the plot with the hourly cloud cover; a rain drop along the top marks hours with precipitation or at least a 40% rain chance and a lightning bolt marks thunderstorm hours (WMO weather codes 95/96/99); each per-night list adds the day's maximum hourly rain chance and the average clear-sky fraction. The forecast runs from about 16 days back to about 15 days ahead (needs internet).</li>
 <li>Weather report (hidden by default; enable it with the Weather report checkbox in the Display panel): the current conditions at the observatory, then one row per day for eight days \u2014 condition and its display symbol, min and max temperature, maximum rain chance, mean cloud cover, maximum wind, and the Moon's illumination at the day's closing midnight \u2014 with links to the underlying weather services, including the Meteoblue meteogram for the site's coordinates (needs internet; fetched from open-meteo and cached for one hour; the links open in new tabs).</li>
@@ -2785,6 +2786,7 @@ function normalizeState(s) {
   var opts = {
     threshold: 1.7,
     windows: true,
+    bands: true,
     moon: false,
     civil: false,
     nautical: false,
@@ -3186,6 +3188,7 @@ function syncAllControls() {
   $("days").value = state.time_range.days;
   refreshNightOf();
   $("windows-chk").checked = !!state.options.windows;
+  $("bands-chk").checked = !!state.options.bands;
   $("threshold").value = state.options.threshold;
   $("curve-sel").value = state.options.curve;
   $("moon-chk").checked = !!state.options.moon;
@@ -4447,10 +4450,10 @@ function drawMoonGlyph(x, y, r, elongDeg) {
  * per target (interpolated from objCoords for moving targets, with
  * segments below the horizon omitted), an optional dashed Moon curve,
  * and, in airmass mode only, the threshold
- * line, the X = 2 reference, and the per-target usable-window bands with
- * transit ticks, and a red now marker (a vertical line with a filled
- * circle at the top of the plot, shown when the current time lies in
- * the view window). The bottom time axis is labeled in the observatory's
+ * line, the X = 2 reference, and, when state.options.bands is set, the
+ * per-target usable-window bands with transit ticks, and a red now marker
+ * (a vertical line with a filled circle at the top of the plot, shown when
+ * the current time lies in the view window). The bottom time axis is labeled in the observatory's
  * time zone; the top axis shows the same ticks in UTC.
  *
  * @returns {undefined} Nothing returned.
@@ -4706,29 +4709,32 @@ function draw(fast) {
     ctx.textAlign = "right";
     ctx.fillText("X = " + state.options.threshold.toFixed(2), plot.x + plot.w - 4, yt - 5);
 
-    var bstep = Math.max(60000, (v1 - v0) / 800);
-    var bn = Math.ceil((v1 - v0) / bstep) + 1;
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    targets.forEach(function (tg) {
-      var ok = [];
-      for (var k = 0; k < bn; k++) {
-        var ms = v0 + k * bstep;
-        if (ms > v1) break;
-        var jd = jdFromUtcMs(ms);
-        var c = objCoords(tg.obj, ms);
-        var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
-        ok.push(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon) >= thrAlt);
-      }
-      var runs = trueRuns(ok, v0, bstep);
-      ctx.fillStyle = tg.color;
-      for (var ri = 0; ri < runs.length; ri++) {
-        var xa = X(Math.max(runs[ri][0], v0));
-        var xb = X(Math.min(runs[ri][1], v1));
-        if (xb > xa) ctx.fillRect(xa, plot.y, xb - xa, plot.h);
-      }
-    });
-    ctx.restore();
+    if (state.options.bands) {
+      var bstep = Math.max(60000, (v1 - v0) / 800);
+      var bn = Math.ceil((v1 - v0) / bstep) + 1;
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      targets.forEach(function (tg) {
+        var ok = [];
+        for (var k = 0; k < bn; k++) {
+          var ms = v0 + k * bstep;
+          if (ms > v1) break;
+          var jd = jdFromUtcMs(ms);
+          var c = objCoords(tg.obj, ms);
+          var tt = precessIcrsToTete(c.raDeg, c.dec, jd);
+          ok.push(altitude(tt.raDeg / 15, tt.dec, jd, obs.lat, obs.lon) >= thrAlt);
+        }
+        var runs = trueRuns(ok, v0, bstep);
+        ctx.fillStyle = tg.color;
+        for (var ri = 0; ri < runs.length; ri++) {
+          var xa = X(Math.max(runs[ri][0], v0));
+          var xb = X(Math.min(runs[ri][1], v1));
+          if (xb > xa) ctx.fillRect(xa, plot.y, xb - xa, plot.h);
+        }
+      });
+      ctx.restore();
+    }
+
     // transit ticks on the time axis, colored per target
     targets.forEach(function (tg) {
       var mid = objCoords(tg.obj, 0.5 * (v0 + v1));
@@ -6034,6 +6040,11 @@ function setDurationDays(n) {
 });
 $("windows-chk").addEventListener("change", function () {
   state.options.windows = this.checked;
+  saveState();
+  scheduleRedraw();
+});
+$("bands-chk").addEventListener("change", function () {
+  state.options.bands = this.checked;
   saveState();
   scheduleRedraw();
 });

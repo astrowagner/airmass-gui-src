@@ -82,8 +82,9 @@ desktop app can open (`File -> Open...`).
 **Copy link** shares the exact setup through the URL's `#w=` fragment; the
 Workspace panel also keeps named workspaces in the browser (**Import JSON**
 loads one back) and **PNG** downloads the current chart. The **Windows**
-option adds an airmass threshold line, per-target usable-window bands,
-transit ticks on the time axis, and a per-night summary panel; **Moon**
+option adds an airmass threshold line, transit ticks on the time axis,
+and a per-night summary panel; **Usable bands** toggles the shaded
+per-target usable-window bands; **Moon**
 overlays the Moon's airmass as seen from the observatory (topocentric
 position: the geocentric NAO 1954/ELP position, truncated at 105 terms,
 agrees with astropy's geocentric ephemeris to ~0.015 deg, with diurnal
