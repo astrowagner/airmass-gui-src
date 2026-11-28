@@ -2104,7 +2104,7 @@ class FindingHoverLayoutTests(unittest.TestCase):
     window resizes, even when the resize colds the star cache. A
     hover selects the nearest Simbad row drawn in the pane the
     cursor is in, so a row queried past a pane's field never
-    steals the hover. The sky image's RA offset is signed (west negative), so a star west of the target still answers to the hover on either pane. The clock is pinned to 2026-11-25T19:00Z.
+    steals the hover. The sky image's RA offset is signed (west negative), so a star west of the target still answers to the hover on either pane. Releasing a manual resize of the finding window (mouseup or touchend) re-runs its shared square layout, since the browser reflows the window's content width only then. The clock is pinned to 2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
@@ -2449,6 +2449,87 @@ class FindingHoverLayoutTests(unittest.TestCase):
         self.assertIsNotNone(info["imgPt"])
         self.assertGreater(info["imgPt"]["x"], 110)
         self.assertIsNotNone(info["chartPt"])
+
+    def test_finding_panel_resize_release_refreshes_layout(self):
+        """Releasing a manual resize of the finding window re-lays it out.
+
+        The shared square derives from the window's inner width
+        (findingCanvasSize), which the browser reflows as the drag
+        progresses; nothing re-runs the finding layout on the
+        reflow, so the release itself (mouseup and touchend) must
+        refresh it, not wait for the next target change. The stub
+        elements' clientWidth does not follow style.width, so each
+        drag step is followed by an explicit reflow emulation.
+        """
+        interp = self._interp()
+        self._setup_hover(interp)
+        interp.evaljs(
+            "$('finding-zoom').value = '1000';"
+            "var el = $('finding-panel');"
+            "el.clientWidth = 700; el.clientHeight = 400;"
+            "$('finding-panes').clientWidth = 700;"
+            "updateFindingChart(); 0")
+        probe = ("JSON.stringify({ canvas: $('finding-chart').style.width,"
+                 " canvasH: $('finding-chart').style.height,"
+                 " img: $('finding-img').style.width,"
+                 " imgH: $('finding-img').style.height,"
+                 " paneL: $('finding-chart-pane').style.width,"
+                 " paneR: $('finding-img-pane').style.width,"
+                 " size: findingCanvasSize() + 'px' })")
+        sizes = json.loads(interp.evaljs(probe))
+        for key in ("canvas", "canvasH", "img", "imgH",
+                    "paneL", "paneR"):
+            self.assertEqual(sizes[key], sizes["size"], key)
+        self.assertEqual(sizes["size"], "345px")
+
+        # Mouse: grab the corner, drag out, release.
+        interp.evaljs(
+            "var el = $('finding-panel');"
+            "el.dispatchEvent({ type: 'mousedown', button: 0,"
+            " clientX: 690, clientY: 390,"
+            " preventDefault: function () {} }); 0")
+        self.assertEqual(interp.evaljs("dragState && dragState.mode"),
+                         "corner")
+        interp.evaljs(
+            "(__winAll['mousemove'] || []).forEach(function (fn) {"
+            " fn({ clientX: 790, clientY: 390 }); }); 0")
+        self.assertEqual(
+            interp.evaljs("$('finding-panel').style.width"), "800px")
+        interp.evaljs(
+            "var el = $('finding-panel');"
+            "el.clientWidth = 800; $('finding-panes').clientWidth = 790; 0")
+        interp.evaljs(
+            "(__winAll['mouseup'] || []).forEach(function (fn) { fn(); }); 0")
+        sizes = json.loads(interp.evaljs(probe))
+        for key in ("canvas", "canvasH", "img", "imgH",
+                    "paneL", "paneR"):
+            self.assertEqual(sizes[key], "390px", key)
+
+        # Touch: grab the corner, drag out, release.
+        interp.evaljs(
+            "var el = $('finding-panel');"
+            "el.dispatchEvent({ type: 'touchstart',"
+            " touches: [{ clientX: 790, clientY: 390 }],"
+            " preventDefault: function () {} }); 0")
+        self.assertEqual(interp.evaljs("touchState && touchState.mode"),
+                         "corner")
+        interp.evaljs(
+            "var el = $('finding-panel');"
+            "el.dispatchEvent({ type: 'touchmove',"
+            " touches: [{ clientX: 880, clientY: 390 }],"
+            " preventDefault: function () {} }); 0")
+        self.assertEqual(
+            interp.evaljs("$('finding-panel').style.width"), "890px")
+        interp.evaljs(
+            "var el = $('finding-panel');"
+            "el.clientWidth = 890; $('finding-panes').clientWidth = 880; 0")
+        interp.evaljs(
+            "var el = $('finding-panel');"
+            "el.dispatchEvent({ type: 'touchend', touches: [] }); 0")
+        sizes = json.loads(interp.evaljs(probe))
+        for key in ("canvas", "canvasH", "img", "imgH",
+                    "paneL", "paneR"):
+            self.assertEqual(sizes[key], "435px", key)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

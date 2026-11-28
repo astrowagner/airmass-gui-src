@@ -375,7 +375,7 @@ Intl = {
 };
 
 // ================= DOM =================
-var __els = {}, __winHandlers = {};
+var __els = {}, __winHandlers = {}, __winAll = {};
 var __clips = [], __confirms = [], __prompts = [], __execCmds = [];
 var __blobs = [], __dataUrls = [], __lastReplaceUrl = null;
 var __opened = [];
@@ -526,7 +526,10 @@ window = {
       window.location.hash = i === 0 ? __lastReplaceUrl : (i > 0 ? __lastReplaceUrl.slice(i) : "");
     }
   },
-  addEventListener: function (type, fn) { __winHandlers[type] = fn; },
+  addEventListener: function (type, fn) {
+    __winHandlers[type] = fn;
+    (__winAll[type] = __winAll[type] || []).push(fn);
+  },
   confirm: function (msg) { __confirms.push(msg); return true; },
   prompt: function (msg) { __prompts.push(msg); return "Smoke WS"; },
   open: function (url, target, features) {

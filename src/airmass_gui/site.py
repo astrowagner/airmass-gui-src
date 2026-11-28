@@ -5176,7 +5176,7 @@ window.addEventListener("mousemove", function (e) {
 // Mouse up: end the drag.
 window.addEventListener("mouseup", function () {
   if (dragState) {
-    if (dragState.kind === "panel") dragState.el.style.cursor = "";
+    if (dragState.kind === "panel") finishPanelResize(dragState.el);
     if (dragState.kind === "sidebar") {
       try { localStorage.setItem(SIDEBAR_W_KEY, String(sidebarW)); }
       catch (e) { /* private mode */ }
@@ -5270,6 +5270,25 @@ function applyPanelResize(el, st, x, y) {
 }
 
 /**
+ * Finish a manual panel resize.
+ *
+ * The panel's content reflows only once the drag ends, so a layout
+ * that reads the panel's inner width (findingCanvasSize) first sees
+ * the new size here; the finding window re-runs its shared square
+ * layout on the release, not at the next target change.
+ *
+ * @param {HTMLElement} el - Panel the resize drag ended on.
+ *
+ * Outputs: el's resize cursor cleared; for #finding-panel,
+ *     updateFindingChart re-runs, re-sizing the star chart, the sky
+ *     image and both panes to the new shared square.
+ */
+function finishPanelResize(el) {
+  el.style.cursor = "";
+  if (el.id === "finding-panel") updateFindingChart();
+}
+
+/**
  * Pointer position relative to a panel.
  *
  * @param {HTMLElement} el - Panel element.
@@ -5303,7 +5322,8 @@ function panelResizeMode(el, pos) {
  * Mouse and single-finger touch drag the panel's right edge, bottom
  * edge, or bottom-right corner; hovering sets the matching resize
  * cursor. Drags continue in the window mousemove handler and end on
- * mouseup or touchend.
+ * mouseup or touchend, which run finishPanelResize (re-laying out
+ * the finding window).
  *
  * @param {string} id - Element id of the panel.
  *
@@ -5350,7 +5370,7 @@ function makePanelResizable(id) {
     if (e.touches.length === 0 && touchState &&
         touchState.kind === "panel" && touchState.el === el) {
       touchState = null;
-      el.style.cursor = "";
+      finishPanelResize(el);
     }
   });
 }
