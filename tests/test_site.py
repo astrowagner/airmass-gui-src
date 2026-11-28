@@ -2104,7 +2104,7 @@ class FindingHoverLayoutTests(unittest.TestCase):
     window resizes, even when the resize colds the star cache. A
     hover selects the nearest Simbad row drawn in the pane the
     cursor is in, so a row queried past a pane's field never
-    steals the hover. The sky image's RA offset is signed (west negative), so a star west of the target still answers to the hover on either pane. Releasing a manual resize of the finding window (mouseup or touchend) re-runs its shared square layout, since the browser reflows the window's content width only then. The clock is pinned to 2026-11-25T19:00Z.
+    steals the hover. A row the draw caps left undrawn is excluded from the star chart's hover as well, so an invisible row under the cursor never steals it. The sky image's RA offset is signed (west negative), so a star west of the target still answers to the hover on either pane. Releasing a manual resize of the finding window (mouseup or touchend) re-runs its shared square layout, since the browser reflows the window's content width only then. The clock is pinned to 2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
@@ -2530,6 +2530,61 @@ class FindingHoverLayoutTests(unittest.TestCase):
         for key in ("canvas", "canvasH", "img", "imgH",
                     "paneL", "paneR"):
             self.assertEqual(sizes[key], "435px", key)
+
+    def test_undrawn_row_does_not_steal_hover(self):
+        """A chart hover cannot select a star the draw caps skipped.
+
+        drawFindingChart draws at most FINDING_DRAW_CAP stars with a
+        V magnitude, so in a crowded field a queried row inside the
+        canvas is left undrawn; that row must not win the hover even
+        with the cursor on it, or a visible star nearby shows
+        details but no crosshair. With the 220 px canvas and the 7.5
+        arcmin display radius the canvas half-side is 110/102 of
+        0.125 deg in dec; the cursor sits on the 402nd with-V row
+        (past the cap), 1 arcmin from the nearest drawn row.
+        """
+        interp = self._interp()
+        interp.evaljs(
+            "state = normalizeState({"
+            " observatory: { name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{name: 'Vega', ra: '279.2347', dec: '38.7837'}],"
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1 } });"
+            "applyTheme('dark');"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "$('finding-panes').clientWidth = 300;"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, findingCanvasSize());"
+            "var rows = [{ name: 'visible-star', raDeg: c.raDeg,"
+            " dec: c.dec + 2 / 60, v: 5.0 }];"
+            "for (var i = 0; i < 400; i++) rows.push("
+            " { name: 'filler ' + i, raDeg: c.raDeg + (i % 40) * 2 / 3600,"
+            " dec: c.dec + (5 + (i % 12) / 10) / 60, v: 10.0 });"
+            "rows.push({ name: 'invisible-star', raDeg: c.raDeg,"
+            " dec: c.dec + 3 / 60, v: 5.0 });"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: rows, count: rows.length };"
+            "updateFindingChart(); 0")
+        out = interp.evaljs(
+            "var size = findingCanvasSize();"
+            "var scale = (size / 2 - 8) / d2r(7.5 / 60);"
+            "var p = gnomonicProject(findingHover.center.raDeg,"
+            " findingHover.center.dec + 3 / 60,"
+            " findingHover.center.raDeg, findingHover.center.dec);"
+            "updateFindingInfo(size / 2 - p.x * scale,"
+            " size / 2 - p.y * scale);"
+            "JSON.stringify({ name: findingChartHighlight &&"
+            " findingChartHighlight.name,"
+            " left: $('finding-nearest').innerHTML })")
+        info = json.loads(out)
+        self.assertEqual(info["name"], "visible-star")
+        self.assertIn("Nearest: visible-star", info["left"])
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")

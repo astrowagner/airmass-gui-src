@@ -6627,7 +6627,9 @@ function sizeFindingCanvas() {
  * magnitude, then FINDING_NOV_CAP faint dots without); the center
  * target and other workspace targets inside the chart get crosses,
  * with names starting to the left of the cross; N / E arrows mark
- * the orientation.
+ * the orientation. Each row is tagged __drawn: true when its star
+ * is drawn, false when the canvas clip or the caps skip it, so the
+ * chart hover (updateFindingInfoAt) excludes the undrawn rows.
  *
  * @param {Object} center - Chart center {raDeg, dec} in degrees.
  * @param {number} radiusArcmin - Angular radius of the drawn circle,
@@ -6664,6 +6666,7 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
   var withV = 0, withoutV = 0;
   for (var si = 0; si < rows.length; si++) {
     var st = rows[si];
+    st.__drawn = false;
     var pt = proj(st.raDeg, st.dec);
     if (!pt || !inside(pt)) continue;
     if (st.v != null) {
@@ -6680,6 +6683,7 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
     ctx.arc(pt.x, pt.y, st.v != null ? findingStarSize(st.v) : 1.2,
             0, 2 * Math.PI);
     ctx.fill();
+    st.__drawn = true;
   }
   ctx.globalAlpha = 1;
   // Crosses and names for the center and other workspace targets.
@@ -6900,11 +6904,13 @@ function refreshFindingDetail() {
  *
  * The coordinate query reaches past both panes' fields to the canvas
  * half-diagonal (findingQueryRadius), so "nearest" is restricted to
- * the rows drawn in pane when one is given: "chart" the canvas
- * square, "image" the sky image's square field (twice the display
- * radius across, the RA offset signed (signedDeltaDeg) so stars
- * west of the center are not read as a half-turn away. Without a
- * pane every queried row is eligible.
+ * the rows drawn in pane when one is given: "chart" the rows drawn
+ * on the canvas square (drawFindingChart tags each row __drawn, and
+ * a row its caps left undrawn is excluded, so an invisible row under
+ * the cursor cannot win), "image" the sky image's square field
+ * (twice the display radius across, the RA offset signed
+ * (signedDeltaDeg) so stars west of the center are not read as a
+ * half-turn away. Without a pane every queried row is eligible.
  *
  * @param {Object} pos - Sky position {raDeg, dec} in degrees.
  * @param {string} [pane] - Pane the cursor is in, "chart" or
@@ -6926,6 +6932,7 @@ function updateFindingInfoAt(pos, pane) {
   var eligible = null;
   if (pane === "chart") {
     eligible = function (row) {
+      if (row.__drawn === false) return false;
       var p = gnomonicProject(row.raDeg, row.dec,
                               hover.center.raDeg, hover.center.dec);
       if (!p) return false;
