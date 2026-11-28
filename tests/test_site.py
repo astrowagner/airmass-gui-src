@@ -58,7 +58,7 @@ CORE_FUNCTIONS = [
     "objCoords", "fieldRotationDeg",
     "gnomonicProject", "gnomonicUnproject", "formatRaDecHms",
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
-    "findingStarSize",
+    "findingStarSize", "findingQueryRadius",
     "findingRadiusText", "findingRadiusFromZoom",
     "findingScaleArcmin", "hips2fitsImageUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
@@ -493,10 +493,22 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('function findingRadiusText(', self.page)
         self.assertIn('function updateFindingChart(', self.page)
         self.assertIn('id="finding-info"', self.page)
-        self.assertIn("Hover the star chart for object info", self.page)
+        self.assertIn("Hover the star chart or the sky image for object info",
+                      self.page)
         self.assertIn('function updateFindingInfo(', self.page)
         self.assertIn('function clearFindingInfo(', self.page)
         self.assertIn('$("finding-chart").addEventListener("mousemove"',
+                      self.page)
+        self.assertIn('$("finding-img").addEventListener("mousemove"',
+                      self.page)
+        self.assertIn('$("finding-img").addEventListener("mouseleave"',
+                      self.page)
+        self.assertIn('function updateFindingInfoAt(', self.page)
+        self.assertIn('fi-wrap', self.page)
+        self.assertIn('fi-left', self.page)
+        self.assertIn('fi-right', self.page)
+        self.assertIn('findingQueryRadius(radiusArcmin, size)', self.page)
+        self.assertIn('simbadCooLookup(c.raDeg, c.dec, queryRadius)',
                       self.page)
         self.assertIn('"mouseleave"', self.page)
         self.assertIn('justify-content: flex-start', self.page)
@@ -3233,6 +3245,28 @@ class JsCoreNumericTests(unittest.TestCase):
         self.assertEqual(vals, sorted(vals),
                          f"zoom mapping not monotonic: {vals}")
         self.assertTrue(all(v > 0 for v in vals))
+
+    def test_finding_query_radius(self):
+        """findingQueryRadius pads out to the square canvas's half-diagonal.
+
+        The star chart canvas is a square with the drawing circle
+        inscribed in it (8 px margin), so the Simbad query radius is
+        the display radius times sqrt(2) times the half-side over the
+        circle's radius.
+        """
+        for size in (220, 320, 400, 480):
+            for radius in (0.5, 7.5):
+                want = radius * math.sqrt(2) * size / 2 / (size / 2 - 8)
+                got = self._js(f"findingQueryRadius({radius}, {size})")
+                self.assertAlmostEqual(got, want, delta=1e-9)
+        # Bigger canvas, smaller relative margin: the padding factor
+        # s / (s - 8) decreases toward 1, so the query radius
+        # decreases toward radius * sqrt(2) as the size grows.
+        vals = [self._js(f"findingQueryRadius(7.5, {s})")
+                for s in (220, 320, 400, 480)]
+        self.assertEqual(vals, sorted(vals, reverse=True),
+                         f"query radius not monotonic in size: {vals}")
+        self.assertTrue(all(v > 7.5 * math.sqrt(2) for v in vals))
 
     def test_finding_offset_and_detail_table(self):
         """findingOffsetText units and findingDetailTable row selection."""
