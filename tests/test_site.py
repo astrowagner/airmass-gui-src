@@ -892,6 +892,36 @@ class SecurityPageTests(unittest.TestCase):
             self.assertNotIn("<b>x</b>", html,
                              fn + " contains raw markup in the name")
 
+    def test_target_names_link_to_simbad_in_panels(self):
+        """Target names link to CDS Simbad in the summary and calendar.
+
+        The observing-windows panel (the cumulative header and each
+        target block) and the annual calendar show the name as an
+        anchor to simbadNameUrl, opening in a new tab; an unnamed
+        target's "Target N" placeholder stays plain text, since there
+        is no name to look up.
+        """
+        self._set_state(
+            [{"name": "Vega", "ra": "18:36:56.3", "dec": "38:47:01.5"},
+             {"ra": "17:44:00.0", "dec": "-29:00:28.0"}],
+            options={"windows": True, "calendar": True})
+        url = json.loads(self.interp.evaljs("JSON.stringify("
+                                            "simbadNameUrl('Vega'))"))
+        self.interp.evaljs("renderSummary();")
+        summary = json.loads(self.interp.evaljs(
+            "JSON.stringify($('summary').__innerHTML)"))
+        self.assertIn('href="' + url + '"', summary)
+        self.assertIn('target="_blank"', summary)
+        self.interp.evaljs("renderCalendar();")
+        calendar = json.loads(self.interp.evaljs(
+            "JSON.stringify($('calendar').__innerHTML)"))
+        self.assertIn('href="' + url + '"', calendar)
+        self.assertIn('target="_blank"', calendar)
+        placeholder = json.loads(self.interp.evaljs(
+            "JSON.stringify(simbadNameUrl('Target 2'))"))
+        self.assertNotIn(placeholder, summary)
+        self.assertNotIn(placeholder, calendar)
+
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class CdsSkyImageTests(unittest.TestCase):

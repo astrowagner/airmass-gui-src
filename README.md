@@ -64,9 +64,10 @@ report panel when the Weather report checkbox is on), CDS Simbad name
 lookups and finding-chart
 object queries, the CDS HiPS2FITS DSS2-color cutout shown inline in the
 finding chart (with a scale bar), and the weather services behind the
-Weather report. Target names, the star chart's caption, and the
-encircled crosshair on a hovered finding-chart object each open the
-object's CDS Simbad name-search page in a new tab.
+Weather report. Target names (in the Targets panel, the observing-windows panel, and
+the annual calendar), the star chart's caption, and the encircled
+crosshair on a hovered finding-chart object each open the object's
+CDS Simbad name-search page in a new tab.
 The chart, calendar, and summary work offline. Open the page
 directly in a browser or drop the file into a GitHub Pages repository.
 

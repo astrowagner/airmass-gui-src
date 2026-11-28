@@ -7,10 +7,11 @@ network only for the optional live services: open-meteo weather (the hourly char
 name/coordinate lookups and finding-chart object queries, and the CDS
 HiPS2FITS DSS2-color cutout, shown inline in the finding chart with a
 scale bar; the cutout's field of view tracks the chart's diameter.
-Target names, the star chart's caption, and clicking the encircled
-crosshair on a hovered finding-chart object (marked on the star chart
-and the sky image) each open the object's CDS Simbad name-search page
-in a new tab. The workspace passed in
+Target names (in the Targets panel, the observing-windows panel, and
+the annual calendar), the star chart's caption, and clicking the
+encircled crosshair on a hovered finding-chart object (marked on the
+star chart and the sky image) each open the object's CDS Simbad
+name-search page in a new tab. The workspace passed in
 becomes the initial state; user edits persist in the browser via localStorage,
 and the page can export the workspace back to a JSON file the desktop app can
 open.
@@ -507,8 +508,8 @@ footer li { margin-bottom: 0.2rem; }
 <li><b>Panel order</b>: the small up/down arrows at the right end of each window's title move that window one slot up or down within its column (the sidebar windows among themselves, the main-column windows among themselves), skipping hidden windows; the arrows are disabled at the ends. The order is per-page only; it returns to the built-in layout on reload or Reset.</li>
 <li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the name is a link to the object's CDS Simbad page (opens in a new tab; double-click renames it in place, Enter saves, Esc cancels); the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
 <li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; the &#9678; button expands the time range until the current time sits exactly at its center, mirroring the longer of the before-now and after-now portions onto the shorter side; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
-<li><b>Observing windows</b>: per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, the Moon's phase at mid-night and its rise and set that night (or whether it stays up or down all night), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
-<li><b>Annual calendar</b>: twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
+<li><b>Observing windows</b>: the target name links to its CDS Simbad page (new tab); per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, the Moon's phase at mid-night and its rise and set that night (or whether it stays up or down all night), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
+<li><b>Annual calendar</b>: the target name links to its CDS Simbad page (new tab); twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
 <li><b>Workspace</b>: save named copies in this browser (each dropdown label shows the saved setup&rsquo;s name, observatory, target count, and save time in UTC), import an exported JSON file, export, Copy link (encodes the full setup in the URL), download the chart as a PNG, and reset to the initial state.</li>
 <li><b>Theme</b>: Dark, Light, or Red for night observing; the choice is remembered in this browser.</li>
 </ul>
@@ -3850,7 +3851,35 @@ function summaryData() {
 }
 
 /**
+ * Markup for a target name linked to its CDS Simbad page.
+ *
+ * The name displays escaped (htmlEscape) and the href is the
+ * URL-encoded name-search URL (simbadNameUrl), so a name from the
+ * workspace can neither inject markup nor break out of the
+ * attribute. The observing-windows and calendar panels build their
+ * rows as markup strings and use this; the Targets panel builds its
+ * link with DOM calls instead (renderTargets).
+ *
+ * @param {string} displayName - Text to show: the object's name when
+ *     named, else the "Target N" placeholder.
+ * @param {string} [objName] - The object's own name; empty or absent
+ *     (a placeholder) renders plain escaped text, no link.
+ * @returns {string} Anchor markup (new tab, noopener) around the
+ *     escaped name, or the escaped name alone.
+ */
+function targetNameLink(displayName, objName) {
+  var nm = objName ? String(objName).trim() : "";
+  if (!nm) return htmlEscape(displayName);
+  return '<a href="' + simbadNameUrl(nm) + '" target="_blank" ' +
+         'rel="noopener">' + htmlEscape(displayName) + "</a>";
+}
+
+/**
  * Render the observing-window summary panel from summaryData().
+ *
+ * The target name is a link to the object's CDS Simbad page
+ * (targetNameLink, new tab); an unnamed target's placeholder is
+ * plain text.
  *
  * Shows the cumulative totals header, then, per target and local day,
  * the window list with durations, the total field rotation accrued
@@ -3879,13 +3908,13 @@ function renderSummary() {
   var html = "", anyTarget = data.targets.length > 0;
   if (anyTarget) {
     var head = [];
-    data.targets.forEach(function (t) { head.push(htmlEscape(t.name) + " " + t.totalH.toFixed(1) + " h"); });
+    data.targets.forEach(function (t) { head.push(targetNameLink(t.name, t.obj.name) + " " + t.totalH.toFixed(1) + " h"); });
     head.push("any target " + data.anyH.toFixed(1) + " h");
     html = '<div class="sum-total"><b>Cumulative X \u2264 ' +
            data.threshold.toFixed(2) + ':</b>  ' + head.join(";  ") + "</div>";
   }
   data.targets.forEach(function (t) {
-    html += '<div class="sum-target"><b>' + htmlEscape(t.name) + "</b>";
+    html += '<div class="sum-target"><b>' + targetNameLink(t.name, t.obj.name) + "</b>";
     t.days.forEach(function (d, di) {
       var parts = [];
       if (!d.everUp) {
@@ -4101,7 +4130,8 @@ var __calCache = { key: null, data: null };
  * threshold, or target list changes.
  *
  * @returns {?Object} null when the time range is unparseable; otherwise
- *     {threshold (max airmass), targets ([{name, months (12 entries per
+ *     {threshold (max airmass), targets ([{name, obj (the workspace
+ *     object, for the name link), months (12 entries per
  *     annualCalendarMonths)}])}.
  */
 function calendarData() {
@@ -4126,6 +4156,7 @@ function calendarData() {
     } catch (e) { return; }
     targets.push({
       name: obj.name || "Target " + (oi + 1),
+      obj: obj,
       months: annualCalendarMonths(function (ms) { return objCoords(obj, ms); },
                                    tz, obs.lat, obs.lon,
                                    monthStart, state.options.threshold),
@@ -4140,8 +4171,11 @@ function calendarData() {
 /**
  * Render the annual calendar panel.
  *
- * A note explains the sampling grid and the usable definition. Per
- * target: a season line (max altitude, total usable hours,
+ * A note explains the sampling grid and the usable definition. The
+ * target name is a link to the object's CDS Simbad page
+ * (targetNameLink, new tab); an unnamed target's placeholder is
+ * plain text. Per target: a season line (max altitude, total usable
+ * hours,
  * first-to-last usable month, and the year's lowest-airmass sample
  * above the horizon as local date/time and airmass; or no usable
  * month; or never rises) above a 12-row table: usable hours, usable
@@ -4202,7 +4236,8 @@ function renderCalendar() {
              " \u00b7 best X " + minAir.toFixed(4) +
              " (" + localStamp(bestMs) + " local)";
     }
-    html += '<div class="cal-target"><b>' + htmlEscape(t.name) + "</b> " +
+    html += '<div class="cal-target"><b>' +
+            targetNameLink(t.name, t.obj.name) + "</b> " +
             line + "</div>";
     html += '<table class="cal-table"><tr><th>Month</th><th>Usable h</th>' +
             "<th>Usable nights</th><th>h/night</th><th>Usable days</th>" +
