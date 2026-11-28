@@ -402,7 +402,8 @@ class SitePageTests(unittest.TestCase):
         themes = _embedded_json(self.page, "THEMES")
         self.assertEqual(themes, THEMES)
         color_keys = ("bg", "bg_alt", "fg", "fg_dim", "accent", "border",
-                      "error", "button", "button_hover", "axes_bg")
+                      "error", "button", "button_hover", "axes_bg",
+                      "highlight")
         for name, entry in themes.items():
             for key in color_keys:
                 self.assertRegex(entry[key], r"^#[0-9a-f]{6}$", (name, key))
@@ -1090,6 +1091,96 @@ class CdsSkyImageTests(unittest.TestCase):
             " size: findingCanvasSize() + 'px' })"))
         for key in ("canvas", "img", "imgH", "left", "right"):
             self.assertEqual(sizes[key], sizes["size"], key)
+
+    def test_hover_mark_encircled_crosshair(self):
+        """Hovering the star chart marks the nearest object with an
+        encircled crosshair in the theme's highlight color.
+
+        The mark is drawn on top of the chart at the pixel position of
+        the object whose details the hover panel shows, and follows it:
+        hovering a different object moves the mark, and its color is
+        THEME.highlight (red in the dark theme, white in the red/night
+        theme, which the theme-sel change handler re-applies through
+        updateFindingChart).
+        """
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "Vega", "ra": "279.2347", "dec": "38.7837"}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "var fcsize = findingCanvasSize();"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, fcsize);"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: ["
+            "  { name: 'Vega', raDeg: c.raDeg, dec: c.dec, v: 0.03 },"
+            "  { name: 'faint', raDeg: 279.3, dec: 38.7, v: 9.0 } ],"
+            " count: 2 };"
+            "__arcCalls = [];"
+            "__strokeSet = [];"
+            "(function () {"
+            "  var orig = __ctx.arc;"
+            "  __ctx.arc = function (x, y, r) {"
+            "    __arcCalls.push([x, y, r]); return orig(x, y, r); };"
+            "  var style = null;"
+            "  Object.defineProperty(__ctx, 'strokeStyle', {"
+            "    get: function () { return style; },"
+            "    set: function (v) { __strokeSet.push(v); style = v; }"
+            "  });"
+            "})(); "
+            "updateFindingChart();"
+        )
+        center = self.interp.evaljs("fcsize / 2")
+        self.interp.evaljs(
+            "updateFindingInfo(" + repr(center) + ", " + repr(center)
+            + "); 0")
+        arcs = json.loads(self.interp.evaljs("JSON.stringify(__arcCalls)"))
+        strokes = json.loads(self.interp.evaljs("JSON.stringify(__strokeSet)"))
+        # The mark sits at the gnomonic projection of the hovered row,
+        # which equals the canvas center up to float noise for a row at
+        # the center, so allow a sub-nanopixel tolerance.
+        hits = [a for a in arcs
+                if abs(a[2] - 9) < 1e-9 and abs(a[0] - center) < 1e-6
+                and abs(a[1] - center) < 1e-6]
+        self.assertTrue(hits,
+                        "no encircled crosshair on the hovered object")
+        self.assertEqual(strokes[-1], "#ff5555",
+                         "crosshair not stroked in the theme highlight")
+        # The mark follows the object: hover the faint row instead.
+        self.interp.evaljs(
+            "var p2 = gnomonicProject(279.3, 38.7,"
+            " findingHover.center.raDeg, findingHover.center.dec);"
+            "var scale2 = (fcsize / 2 - 8) / d2r(findingHover.radiusArcmin"
+            " / 60);"
+            "updateFindingInfo(fcsize / 2 - p2.x * scale2,"
+            " fcsize / 2 - p2.y * scale2); 0")
+        ok = json.loads(self.interp.evaljs(
+            "JSON.stringify((function () {"
+            "  var last = __arcCalls[__arcCalls.length - 1];"
+            "  return { ok: Math.abs(last[0] - (fcsize / 2 - p2.x * scale2))"
+            "           < 1e-9"
+            "          && Math.abs(last[1] - (fcsize / 2 - p2.y * scale2))"
+            "           < 1e-9"
+            "          && Math.abs(last[2] - 9) < 1e-9 };"
+            "})())"))
+        self.assertTrue(ok["ok"], "crosshair did not follow the hover")
+        # Red/night theme: the theme-sel handler re-draws through
+        # updateFindingChart; the mark comes back white.
+        self.interp.evaljs(
+            "applyTheme('red'); updateFindingChart(); 0")
+        ok2 = json.loads(self.interp.evaljs(
+            "JSON.stringify({ stroke: __strokeSet[__strokeSet.length - 1] })"))
+        self.assertEqual(ok2["stroke"], "#ffffff",
+                         "red/night theme crosshair is not white")
 
     def test_img_error_shows_unavailable(self):
         """A failed image load says the image is unavailable, hides the
@@ -1923,7 +2014,9 @@ class FindingHoverLayoutTests(unittest.TestCase):
             " options: { windows: true, calendar: true, threshold: 2.0,"
             " finding: true },"
             " time_range: { start: '2026-11-25T00:00', days: 1 } });"
-            "syncAllControls(); 0")
+            "syncAllControls();"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; }; 0")
         interp.evaljs(
             "findingHover = { center: { raDeg: 279.2347, dec: 38.7837 },"
             " rows: [{ name: 'Vega', raDeg: 279.2347, dec: 38.7837,"

@@ -44,6 +44,9 @@ function __simbadUrls() {
 }
 
 async function __main() {
+  var __fc = $("finding-chart");
+  if (!__fc.getContext)
+    __fc.getContext = function () { return __ctx; };
   findingHover = {
     center: { raDeg: 279.23473479, dec: 38.78368889 },
     radiusArcmin: 30,
