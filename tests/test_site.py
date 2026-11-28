@@ -288,6 +288,21 @@ class SitePageTests(unittest.TestCase):
         self.assertIn("Airmass chart v%s by K. Wagner (UArizona)"
                       % __version__, self.page)
 
+    def test_panel_links_use_theme_accent(self):
+        """Links in the page's panels use the theme accent color.
+
+        Without a global anchor rule, the Simbad name links in the
+        observing-windows and calendar panels, the star chart's
+        caption link, and the weather-report links fall back to the
+        browser default (dark blue), which is dim on the dark theme.
+        The page sets a global anchor color (var(--accent)), so every
+        link takes the theme's accent; the footer's own rule keeps
+        its no-underline style.
+        """
+        self.assertRegex(
+            self.page,
+            r"(?<=[{};])\s*a\s*\{\s*color:\s*var\(--accent\)\s*;\s*\}")
+
     def test_chart_navigation_controls(self):
         """The chart has a horizontal scrollbar, zoom buttons, a bottom-edge
         / bottom-right-corner resize, and an HTML legend row under the canvas."""

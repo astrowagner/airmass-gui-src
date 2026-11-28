@@ -336,6 +336,8 @@ canvas { display: block; width: 100%; }
          pointer-events: none; z-index: 9; }
 .status { min-height: 1.15em; font-size: 0.8rem; color: var(--error);
           margin-top: 0.4rem; word-break: break-word; }
+a { color: var(--accent); }
+a:hover { text-decoration: underline; }
 footer { margin-top: 1.25rem; color: var(--fg-dim); font-size: 0.8rem; }
 footer summary { cursor: pointer; color: var(--fg); }
 footer summary:hover { color: var(--accent); }
