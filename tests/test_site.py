@@ -21,6 +21,7 @@ import numpy as np
 import html as html_mod
 from astropy import units as u
 from astropy.coordinates import AltAz, EarthLocation, SkyCoord, TETE, get_body, get_sun
+from astropy.io import fits
 from astropy.time import Time
 
 from airmass_gui import astro, chart, lookup
@@ -59,7 +60,7 @@ CORE_FUNCTIONS = [
     "simbadCooParse", "findingOffsetText", "findingDetailTable",
     "findingStarSize",
     "findingGridStep", "findingRadiusText", "findingRadiusFromZoom",
-    "hips2fitsImageUrl",
+    "findingScaleArcmin", "hips2fitsImageUrl",
     "sunEclLonDeg", "moonElongationDeg", "moonPhaseInfo",
     "weatherSymbolKind", "wmoText", "wmoIcon",
     "blendHex",
@@ -473,6 +474,11 @@ class SitePageTests(unittest.TestCase):
         self.assertIn('$("finding-zoom").addEventListener("input"',
                       self.page)
         self.assertIn('function hips2fitsImageUrl(', self.page)
+        self.assertIn('function findingScaleArcmin(', self.page)
+        self.assertIn('var FINDING_FOV_DEG = 0.25', self.page)
+        self.assertIn('<div id="finding-scale"', self.page)
+        self.assertIn('id="finding-scale-bar"', self.page)
+        self.assertIn('id="finding-scale-label"', self.page)
         self.assertIn('hips2fitsImageUrl(c.raDeg, c.dec)', self.page)
         self.assertIn('img.src = imgUrl', self.page)
         self.assertIn('$("finding-img").addEventListener("error"',
@@ -991,9 +997,46 @@ class CdsSkyImageTests(unittest.TestCase):
             "JSON.stringify($('finding-img').style.display)"))
         self.assertEqual(display, "none")
 
+    def test_scale_bar_matches_recorded_wcs(self):
+        """The scale bar spans one third of the cutout's field.
+
+        findingScaleArcmin picks 5 arcmin for the 0.25 deg cutout, so
+        after updateFindingChart the bar is 33.33 percent of the
+        image width with a 5' label; the fov the URL builder requests
+        reproduces the recorded FITS WCS's center-row field.
+        """
+        self.assertEqual(self.interp.evaljs("findingScaleArcmin(15)"), 5)
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "t", "ra": "00:42:44.33", "dec": "+41:16:07.32"}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '640';"
+            "updateFindingChart();"
+        )
+        width = float(self.interp.evaljs(
+            "parseFloat($('finding-scale-bar').style.width)"))
+        self.assertAlmostEqual(width, 100.0 * 5.0 / 15.0, delta=0.01)
+        label = json.loads(self.interp.evaljs(
+            "JSON.stringify($('finding-scale-label').textContent)"))
+        self.assertEqual(label, "5\u2032")
+        src = self.interp.evaljs("JSON.stringify($('finding-img').src)")
+        fov = float(re.search(r"[?&]fov=([^&]+)", src).group(1))
+        header = fits.getheader(CDS_FITS_FIXTURE)
+        self.assertAlmostEqual(fov, 500.0 * abs(header["CDELT1"]),
+                               delta=1e-5)
+
 
 CDS_FIXTURE = (Path(__file__).resolve().parent / "fixtures" /
                "cds_hips2fits_m31.jpg")
+CDS_FITS_FIXTURE = (Path(__file__).resolve().parent / "fixtures" /
+                    "cds_hips2fits_m31_fits.fits")
 
 
 def _jpeg_sof0(data):
@@ -1060,6 +1103,47 @@ class TestCdsHiPS2FITSFixture(unittest.TestCase):
             np.median(gray[h - 50:h - 10, w - 50:w - 10]),
         ]
         self.assertGreater(central / float(np.mean(corners)), 1.3)
+
+
+class TestCdsHiPS2FITSFitsFixture(unittest.TestCase):
+    """The archived CDS HiPS2FITS FITS reply fixes the cutout's WCS.
+
+    Recorded 2026-11-28 01:02 UTC (HTTP 200, content-type
+    application/fits) from the same service and parameters as
+    tests/fixtures/cds_hips2fits_m31.jpg with format=fits:
+    https://alasky.cds.unistra.fr/hips-image-services/hips2fits
+    ?hips=DSS2%2Fcolor&width=500&height=500&projection=TAN&fov=0.25
+    &ra=10.6847083&dec=41.26875&format=fits, saved unedited. The
+    JPEG reply carries no WCS, so this reply fixes the cutout's field
+    of view and plate scale.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.header = fits.getheader(CDS_FITS_FIXTURE)
+
+    def test_reply_is_a_500x500_tan_cutout(self):
+        """Single HDU, 500 x 500 x 4 uint8, TAN in ICRS centered on
+        M31's J2000 position."""
+        header = self.header
+        self.assertEqual(header["NAXIS"], 3)
+        self.assertEqual((header["NAXIS1"], header["NAXIS2"],
+                          header["NAXIS3"]), (500, 500, 4))
+        self.assertEqual(header["BITPIX"], 8)
+        self.assertEqual(header["CTYPE1"], "RA---TAN")
+        self.assertEqual(header["CTYPE2"], "DEC--TAN")
+        self.assertEqual(header["RADESYS"], "ICRS")
+        self.assertAlmostEqual(header["CRVAL1"], 10.6847083, delta=1e-6)
+        self.assertAlmostEqual(header["CRVAL2"], 41.26875, delta=1e-6)
+
+    def test_field_and_plate_scale(self):
+        """The fov parameter is the center-row width: 0.25 deg,
+        about 1.8 arcsec per pixel."""
+        header = self.header
+        self.assertAlmostEqual(500.0 * abs(header["CDELT1"]), 0.25,
+                               delta=0.25 * 0.001)
+        self.assertAlmostEqual(abs(header["CDELT1"]) * 3600.0, 1.8,
+                               delta=1.8 * 0.001)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
