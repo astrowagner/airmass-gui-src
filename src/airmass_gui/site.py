@@ -452,8 +452,8 @@ footer li { margin-bottom: 0.2rem; }
         <div id="finding-nearest"><span class="finding-dim">Hover the star chart or the sky image for object info</span></div>
       </div>
       <div class="finding-pane" id="finding-img-pane">
-        <div class="finding-caption">Sky image (DSS2 color, CDS)</div>
         <img id="finding-img" alt="DSS2 color sky image">
+        <div class="finding-caption">Sky image (DSS2 color, CDS)</div>
         <div id="finding-scale" class="finding-scale">
           <span id="finding-scale-label">5&prime;</span>
           <div id="finding-scale-bar" class="finding-scale-bar"></div>

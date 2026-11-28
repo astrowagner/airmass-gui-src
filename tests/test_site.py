@@ -549,6 +549,11 @@ class SitePageTests(unittest.TestCase):
         self.assertLess(chart, nearest)
         self.assertLess(nearest, img)
         self.assertLess(img, details)
+        # The two squares share the row's top edge: each pane's
+        # caption sits below its square, so the sky caption follows
+        # the image, like the star chart's caption.
+        sky_caption = self.page.index('Sky image (DSS2 color, CDS)')
+        self.assertLess(img, sky_caption)
         self.assertIn('function findingOffsetText(', self.page)
         self.assertIn('function findingMagList(', self.page)
         self.assertIn('function findingBasicTable(', self.page)
