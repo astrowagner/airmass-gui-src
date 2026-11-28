@@ -480,6 +480,9 @@ class SitePageTests(unittest.TestCase):
         self.assertNotIn('findingGridStep', self.page)
         self.assertNotIn('ctx.arc(cx, cy, R, 0, 2 * Math.PI);',
                       self.page)
+        self.assertNotIn('(R + 1) * (R + 1)', self.page)
+        self.assertIn('Math.abs(pt.x - cx)', self.page)
+        self.assertIn('ctx.textAlign = "right"', self.page)
         self.assertIn('<span id="finding-zoom-label">7.5&prime;</span>',
                       self.page)
         self.assertIn('<div id="finding-scale"', self.page)
