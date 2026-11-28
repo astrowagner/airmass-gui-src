@@ -520,18 +520,21 @@ class SitePageTests(unittest.TestCase):
                       self.page)
         self.assertIn('"mouseleave"', self.page)
         self.assertIn('justify-content: flex-start', self.page)
-        self.assertIn('.finding-pane:first-child { flex: 0 0 auto; }',
-                      self.page)
         self.assertIn('.finding-pane { position: relative; display: flex;\n'
-                      '                flex-direction: column; min-width: 0; }',
+                      '                flex-direction: column; min-width: 0;'
+                      ' flex: 0 0 auto; }', self.page)
+        self.assertNotIn('.finding-pane:first-child', self.page)
+        self.assertNotIn('.finding-pane:last-child', self.page)
+        self.assertIn('<div class="finding-pane" id="finding-chart-pane">',
                       self.page)
-        self.assertIn('.finding-pane:last-child { flex: 1 1 300px; }',
+        self.assertIn('<div class="finding-pane" id="finding-img-pane">',
                       self.page)
+        self.assertIn('#finding-img { display: block; }', self.page)
         self.assertIn('#finding-details { flex: 1 1 auto; min-height: 8.8rem;'
                       ' overflow-y: auto;', self.page)
         self.assertIn('#finding-details td { overflow-wrap: break-word; }',
                       self.page)
-        self.assertIn('INFO_RESERVE_PX', self.page)
+        self.assertNotIn('INFO_RESERVE_PX', self.page)
         self.assertIn('#finding-details table { border-collapse: collapse;',
                       self.page)
         self.assertIn('#finding-nearest table { border-collapse: collapse;',
@@ -1043,6 +1046,44 @@ class CdsSkyImageTests(unittest.TestCase):
                 "JSON.stringify($('finding-img').src)")
             got = float(re.search(r"[?&]fov=([^&]+)", src).group(1))
             self.assertAlmostEqual(got, fov, delta=1e-5)
+
+    def test_panes_share_fixed_square(self):
+        """Star chart and sky image are the same fixed square.
+
+        The pane widths follow the shared canvas size, not the info
+        tables, so a table that grows pushes the window down instead
+        of resizing the squares: after updateFindingChart the canvas,
+        the image and both panes all carry findingCanvasSize().
+        """
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "t", "ra": "279.2347", "dec": "38.7837"}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, findingCanvasSize());"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: [], count: 0 };"
+            "updateFindingChart();"
+        )
+        sizes = json.loads(self.interp.evaljs(
+            "JSON.stringify({ canvas: $('finding-chart').style.width,"
+            " img: $('finding-img').style.width,"
+            " imgH: $('finding-img').style.height,"
+            " left: $('finding-chart-pane').style.width,"
+            " right: $('finding-img-pane').style.width,"
+            " size: findingCanvasSize() + 'px' })"))
+        for key in ("canvas", "img", "imgH", "left", "right"):
+            self.assertEqual(sizes[key], sizes["size"], key)
 
     def test_img_error_shows_unavailable(self):
         """A failed image load says the image is unavailable, hides the
