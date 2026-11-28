@@ -6552,6 +6552,33 @@ function layoutFindingPanes(size) {
 }
 
 /**
+/**
+ * Size the star chart canvas to the shared finding square.
+ *
+ * The canvas, the sky image and the two panes must stay the same
+ * size in every state (findingCanvasSize), so updateFindingChart
+ * calls this before it knows whether the star query is cached: the
+ * cache key includes the canvas size, a resize colds the cache, and
+ * the canvas must not wait for the re-query to be re-sized.
+ * drawFindingChart calls it again right before drawing.
+ *
+ * @returns {number} The shared square side, px.
+ */
+function sizeFindingCanvas() {
+  var canvas = $("finding-chart");
+  var size = findingCanvasSize();
+  canvas.width = size * 2;
+  canvas.height = size * 2;
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+  var ctx = canvas.getContext("2d");
+  ctx.setTransform(2, 0, 0, 2, 0, 0);
+  ctx.fillStyle = THEME.bg;
+  ctx.fillRect(0, 0, size, size);
+  return size;
+}
+
+/**
  * Draw the finding chart: stars and target markers.
  *
  * A gnomonic projection centered on the target, north up and east
@@ -6582,13 +6609,8 @@ function layoutFindingPanes(size) {
 function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
                           highlight) {
   var canvas = $("finding-chart");
-  var size = findingCanvasSize();
-  canvas.width = size * 2;
-  canvas.height = size * 2;
-  canvas.style.width = size + "px";
-  canvas.style.height = size + "px";
+  var size = sizeFindingCanvas();
   var ctx = canvas.getContext("2d");
-  ctx.setTransform(2, 0, 0, 2, 0, 0);
   var cx = size / 2, cy = size / 2, R = size / 2 - 8;
   var scale = R / d2r(radiusArcmin / 60);
   var proj = function (raDeg, dec) {
@@ -6599,8 +6621,6 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
     var dx = Math.abs(pt.x - cx), dy = Math.abs(pt.y - cy);
     return dx <= size / 2 && dy <= size / 2;
   };
-  ctx.fillStyle = THEME.bg;
-  ctx.fillRect(0, 0, size, size);
   // Stars: magnitude-scaled first, then faint dots for unknown V.
   var withV = 0, withoutV = 0;
   for (var si = 0; si < rows.length; si++) {
@@ -6963,10 +6983,11 @@ function clearFindingInfo() {
  * @returns {void} Draws #finding-chart (J2000), points the inline sky
  *     image (#finding-img, hips2fitsImageUrl at twice the radius) and the
  *     caption link (#finding-simlink, simbadNameUrl) at the target's
- *     J2000 position and name, fixes both panes and the image to the
- *     shared square
- *     (findingCanvasSize, layoutFindingPanes) so the chart and image
- *     keep the same size, sizes the scale bar (#finding-scale) to
+ *     J2000 position and name, fixes both panes, the canvas and the
+ *     image to the shared square (findingCanvasSize, layoutFindingPanes,
+ *     sizeFindingCanvas) so the chart and image keep the same size even
+ *     while a star query is in flight, sizes the scale bar
+ *     (#finding-scale) to
  *     the cutout's field,
  *     updates #finding-status, re-draws the sky image overlay
  *     (drawFindingImageOverlay), and sets the hover source for the two
@@ -7003,6 +7024,7 @@ function updateFindingChart() {
   var size = findingCanvasSize();
   var queryRadius = findingQueryRadius(radiusArcmin, size);
   layoutFindingPanes(size);
+  sizeFindingCanvas();
   var img = $("finding-img");
   img.style.width = size + "px";
   img.style.height = size + "px";

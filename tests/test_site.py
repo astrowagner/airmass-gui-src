@@ -2099,8 +2099,10 @@ class FindingHoverLayoutTests(unittest.TestCase):
     Radial velocity, Identifiers, a "-" cell where the record lacks
     the field, a single "querying" row while the lookup is in
     flight). clearFindingInfo restores the placeholder in the left
-    element and empties the right one. The clock is pinned to
-    2026-11-25T19:00Z.
+    element and empties the right one. The star chart canvas, the
+    sky image and the two panes stay the same shared size across
+    window resizes, even when the resize colds the star cache. The
+    clock is pinned to 2026-11-25T19:00Z.
     """
 
     NOW = int(datetime(2026, 11, 25, 19, 0,
@@ -2247,6 +2249,55 @@ class FindingHoverLayoutTests(unittest.TestCase):
         self.assertIn(
             "Hover the star chart or the sky image for object info", left)
         self.assertEqual(right, '""')
+
+    def test_panes_stay_linked_on_window_resize(self):
+        """A window resize keeps the star chart and sky image the same
+        size.
+
+        The star cache key includes the canvas size, so a resize that
+        moves the shared square colds the cache; the canvas must then
+        be re-sized with the image and the panes right away, not left
+        at its old size until the re-query answers (in the stub the
+        Simbad reply is empty, so it never does, and the mismatch
+        would persist).
+        """
+        interp = self._interp()
+        interp.evaljs(
+            "state = normalizeState({"
+            " observatory: { name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: [{name: 'Vega', ra: '279.2347', dec: '38.7837'}],"
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1 } });"
+            "applyTheme('dark');"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, findingCanvasSize());"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = {"
+            " rows: [{ name: 'Vega', raDeg: c.raDeg, dec: c.dec, v: 0.03 }],"
+            " count: 1 };"
+            "updateFindingChart(); 0")
+        probe = ("JSON.stringify({ canvas: $('finding-chart').style.width,"
+                 " canvasH: $('finding-chart').style.height,"
+                 " img: $('finding-img').style.width,"
+                 " imgH: $('finding-img').style.height,"
+                 " paneL: $('finding-chart-pane').style.width,"
+                 " paneR: $('finding-img-pane').style.width,"
+                 " size: findingCanvasSize() + 'px' })")
+        for cw in (300, 1100):
+            interp.evaljs(
+                "$('finding-panes').clientWidth = %d;"
+                "__winHandlers['resize'](); flushTimers(); 0" % cw)
+            sizes = json.loads(interp.evaljs(probe))
+            for key in ("canvas", "canvasH", "img", "imgH",
+                        "paneL", "paneR"):
+                self.assertEqual(sizes[key], sizes["size"], key)
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
