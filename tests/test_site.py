@@ -1260,6 +1260,66 @@ class CdsSkyImageTests(unittest.TestCase):
         self.assertGreater(self.interp.evaljs("__octx.clears"), before,
                            "hiding the image does not clear the overlay")
 
+    def test_image_crosshair_click_opens_simbad(self):
+        """A click on the sky image's encircled crosshair opens that
+        object's CDS Simbad page; other clicks do not.
+
+        The overlay canvas is transparent to the mouse, so the click
+        lands on the image itself, which hit-tests the crosshair's
+        position (15 px reach, its outer tick) as the star chart does.
+        The shared interpreter keeps stub element state between
+        tests, so the image's display is reset to visible: an
+        earlier test in this class simulates a failed load, and
+        updateFindingChart re-shows the image only when its URL
+        changes.
+        """
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps(
+                [{"name": "Vega", "ra": "279.2347", "dec": "38.7837"}]) + ","
+            " options: { finding: true },"
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });"
+            "applyTheme('dark');"
+            "$('finding-img').style.display = '';"
+            "$('finding-target').value = '0';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "var ov = $('finding-img-overlay');"
+            "ov.getContext = function () { return __ctx; };"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, findingCanvasSize());"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: ["
+            "  { name: 'Vega', raDeg: c.raDeg, dec: c.dec, v: 0.03 } ],"
+            " count: 1 };"
+            "updateFindingChart();"
+            "updateFindingInfo(findingCanvasSize() / 2,"
+            " findingCanvasSize() / 2); 0"
+        )
+        url = json.loads(self.interp.evaljs(
+            "JSON.stringify(simbadNameUrl('Vega'))"))
+        self.interp.evaljs(
+            "var ev = { type: 'click',"
+            " clientX: findingCanvasSize() / 2,"
+            " clientY: findingCanvasSize() / 2 };"
+            " $('finding-img').dispatchEvent(ev); 0")
+        self.assertEqual(
+            json.loads(self.interp.evaljs("JSON.stringify(__opened)")),
+            [[url, "_blank", "noopener"]],
+            "click on the image crosshair did not open the Simbad page")
+        self.interp.evaljs(
+            "var ev = { type: 'click', clientX: 30, clientY: 30 };"
+            " $('finding-img').dispatchEvent(ev); 0")
+        self.assertEqual(
+            len(json.loads(self.interp.evaljs(
+                "JSON.stringify(__opened)"))), 1,
+            "a click away from the crosshair opened a page")
+
     def test_img_error_shows_unavailable(self):
         """A failed image load says the image is unavailable, hides the
         img, and leaves the new-tab link in place."""
