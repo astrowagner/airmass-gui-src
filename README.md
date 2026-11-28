@@ -73,8 +73,13 @@ directly in a browser or drop the file into a GitHub Pages repository.
 
 The page is fully interactive: edit the observatory (preset or custom
 coordinates/time zone), the start time and duration, and the target list,
-and reorder the panel windows with the up/down arrows in their headers,
-with the chart re-rendering live. The panel order is per-page only and is
+pick which target the observing-windows and annual-calendar panels list
+(the first by default, any target, or All targets in each panel's Target
+dropdown), and reorder the panel windows with the up/down arrows in
+their headers, with the chart re-rendering live. The finding chart's
+Target dropdown adds an All targets option, which centers the field on
+the first target and marks every workspace target with a cross in its
+own color. The panel order is per-page only and is
 not saved. Edits persist in the browser (localStorage) until
 you click **Reset**; **Export JSON** downloads the workspace as a JSON file the
 desktop app can open (`File -> Open...`).

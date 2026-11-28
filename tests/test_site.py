@@ -1040,6 +1040,157 @@ class UsableBandsToggleTests(unittest.TestCase):
 
 
 @unittest.skipUnless(dukpy is not None, "dukpy not installed")
+class PanelTargetSelectTests(unittest.TestCase):
+    """The observing-windows, annual-calendar and finding-chart panels
+    pick their target with a dropdown: the first target by default,
+    any other target, or all of them."""
+
+    @classmethod
+    def setUpClass(cls):
+        from test_weather_live import STUBS
+        with tempfile.TemporaryDirectory() as tmp:
+            cls.page = build_site(new_workspace(),
+                                  Path(tmp) / "index.html").read_text(
+                encoding="utf-8")
+        script = re.findall(r"<script>(.*?)</script>", cls.page, re.S)[0]
+        all_ids = sorted(set(re.findall(r'id="([^"]+)"', cls.page)))
+        obs = json.loads(
+            re.search(r"var OBSERVATORIES =\s*(\[.*?\]);",
+                      script, re.S).group(1))
+        tz_table = {"UTC": 0, "America/Phoenix": -7}
+        for o in obs:
+            tz_table.setdefault(o["timezone"], -7)
+        stubs = (STUBS
+                 .replace("__ALL_IDS__", json.dumps(all_ids))
+                 .replace("__TZ_TABLE__", json.dumps(tz_table))
+                 .replace("__SIMBAD_BODY__", json.dumps(""))
+                 .replace("__OPEN_METEO_BODY__",
+                          json.dumps(json.dumps({}))))
+        cls.interp = dukpy.JSInterpreter()
+        cls.interp.evaljs(stubs + ";" + chr(10) + "0")
+        cls.interp.evaljs(
+            "for (var __k in __els) {"
+            " Object.defineProperty(__els[__k], 'options', {"
+            "  get: function () { return this.children; } }); }"
+            ";" + chr(10) + "0")
+        cls.interp.evaljs(script + ";" + chr(10) + "0")
+
+    def _two_targets(self, options):
+        """Load a two-target state at the LBT preset."""
+        self.interp.evaljs(
+            "state = normalizeState({ observatory: {"
+            " name: 'Mount Graham (LBT)', lat: 32.70131,"
+            " lon: -109.88906, elevation_m: 3221.0,"
+            " timezone: 'America/Phoenix',"
+            " preset: 'Mount Graham (LBT)' },"
+            " objects: " + json.dumps([
+                {"name": "TGAlpha", "ra": "279.2347", "dec": "38.7837"},
+                {"name": "TGBravo", "ra": "101.2872", "dec": "-16.7161"}]) + ","
+            " options: " + json.dumps(options) + ","
+            " time_range: { start: '2026-11-25T00:00', days: 1.0 } });")
+
+    def _inner(self, sel):
+        return json.loads(self.interp.evaljs(
+            "JSON.stringify($('%s').__innerHTML)" % sel))
+
+    def test_dropdowns_present(self):
+        """The page carries the windows and calendar target selects."""
+        self.assertIn('<select id="windows-target">', self.page)
+        self.assertIn('<select id="calendar-target">', self.page)
+        self.assertIn('<select id="finding-target">', self.page)
+
+    def test_options_default_and_clamp(self):
+        """normalizeState defaults the panel target selections to the
+        first target, keeps a valid choice, and clamps a stale index."""
+        self._two_targets({})
+        got = json.loads(self.interp.evaljs(
+            "JSON.stringify({ w: state.options.windowsTarget,"
+            " c: state.options.calendarTarget })"))
+        self.assertEqual(got, {"w": "0", "c": "0"})
+        self._two_targets({"windowsTarget": "5", "calendarTarget": "all"})
+        got = json.loads(self.interp.evaljs(
+            "JSON.stringify({ w: state.options.windowsTarget,"
+            " c: state.options.calendarTarget })"))
+        self.assertEqual(got, {"w": "0", "c": "all"})
+        self._two_targets({"windowsTarget": "1"})
+        self.assertEqual(self.interp.evaljs("state.options.windowsTarget"),
+                         "1")
+
+    def test_windows_panel_filters_targets(self):
+        """renderSummary lists only the selected target by default."""
+        self._two_targets({"windows": True})
+        self.interp.evaljs("renderSummary();")
+        html = self._inner("summary")
+        self.assertIn("TGAlpha", html)
+        self.assertNotIn("TGBravo", html)
+        self.interp.evaljs(
+            "state.options.windowsTarget = '1'; renderSummary();")
+        html = self._inner("summary")
+        self.assertIn("TGBravo", html)
+        self.assertNotIn("TGAlpha", html)
+        self.interp.evaljs(
+            "state.options.windowsTarget = 'all'; renderSummary();")
+        html = self._inner("summary")
+        self.assertIn("TGAlpha", html)
+        self.assertIn("TGBravo", html)
+
+    def test_calendar_panel_filters_targets(self):
+        """renderCalendar shows only the selected target by default."""
+        self._two_targets({"calendar": True})
+        self.interp.evaljs("renderCalendar();")
+        html = self._inner("calendar")
+        self.assertIn("TGAlpha", html)
+        self.assertNotIn("TGBravo", html)
+        self.interp.evaljs(
+            "state.options.calendarTarget = '1'; renderCalendar();")
+        html = self._inner("calendar")
+        self.assertIn("TGBravo", html)
+        self.assertNotIn("TGAlpha", html)
+        self.interp.evaljs(
+            "state.options.calendarTarget = 'all'; renderCalendar();")
+        html = self._inner("calendar")
+        self.assertIn("TGAlpha", html)
+        self.assertIn("TGBravo", html)
+
+    def test_finding_all_option(self):
+        """All targets in the finding chart centers on the first
+        target and marks every workspace target.
+
+        The Target select carries an All targets option (value all);
+        chosen, the field centers on the first target's J2000
+        position and findingHover carries centerIdx -1, which
+        drawFindingChart reads as every-target crosses.
+        """
+        self._two_targets({"finding": True})
+        self.interp.evaljs("refreshFindingTargets();")
+        opts = json.loads(self.interp.evaljs(
+            "JSON.stringify(Array.prototype.map.call("
+            "$('finding-target').options,"
+            " function (o) { return o.value; }))"))
+        self.assertIn("all", opts)
+        self.interp.evaljs(
+            "$('finding-target').value = 'all';"
+            "$('finding-zoom').value = '1000';"
+            "var fc = $('finding-chart');"
+            "fc.getContext = function () { return __ctx; };"
+            "var c = objCoords(state.objects[0], Date.now());"
+            "var q = findingQueryRadius(7.5, findingCanvasSize());"
+            "findingCache[c.raDeg.toFixed(4) + ',' + c.dec.toFixed(4) + "
+            " ',' + q.toFixed(1)] = { rows: [], count: 0 };"
+            "updateFindingChart();"
+        )
+        self.assertEqual(json.loads(self.interp.evaljs(
+            "JSON.stringify(findingHover.centerIdx)")), -1)
+        want = json.loads(self.interp.evaljs(
+            "JSON.stringify(objCoords(state.objects[0], Date.now()))"))
+        got = json.loads(self.interp.evaljs(
+            "JSON.stringify({ ra: findingHover.center.raDeg,"
+            " dec: findingHover.center.dec })"))
+        self.assertAlmostEqual(got["ra"], want["raDeg"], places=9)
+        self.assertAlmostEqual(got["dec"], want["dec"], places=9)
+
+
+@unittest.skipUnless(dukpy is not None, "dukpy not installed")
 class CdsSkyImageTests(unittest.TestCase):
     """The finding chart's sky image centers on the J2000 position.
 

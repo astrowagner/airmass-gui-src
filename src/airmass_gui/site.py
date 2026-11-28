@@ -489,6 +489,7 @@ footer li { margin-bottom: 0.2rem; }
     <h2>Observing windows</h2>
     <div id="summary"></div>
     <div class="actions">
+      <label class="field"><span>Target</span><select id="windows-target"></select></label>
       <button id="csv-btn" title="Download the observing windows as CSV">Windows CSV</button>
     </div>
   </div>
@@ -499,6 +500,9 @@ footer li { margin-bottom: 0.2rem; }
   <div class="panel" id="calendar-panel">
     <h2>Annual calendar</h2>
     <div id="calendar"></div>
+    <div class="actions">
+      <label class="field"><span>Target</span><select id="calendar-target"></select></label>
+    </div>
   </div>
 </main>
 </div>
@@ -512,8 +516,8 @@ footer li { margin-bottom: 0.2rem; }
 <li><b>Panel order</b>: the small up/down arrows at the right end of each window's title move that window one slot up or down within its column (the sidebar windows among themselves, the main-column windows among themselves), skipping hidden windows; the arrows are disabled at the ends. The order is per-page only; it returns to the built-in layout on reload or Reset.</li>
 <li><b>Targets</b>: one row per target with its color, name, RA, Dec, and V magnitude; the name is a link to the object's CDS Simbad page (opens in a new tab; double-click renames it in place, Enter saves, Esc cancels); the Simbad button looks a name up in CDS Simbad (needs internet), + adds a row, &#8635; refreshes the row's Simbad record (parallax, distance, proper motion, identifiers), and &#215; removes it.</li>
 <li><b>Main chart</b>: left axis airmass, right axis altitude; bottom axis local time, top UTC. Shading marks day, twilight, and night; the red circle at the top marks the current time. Hover for each target's details. The wheel scrolls the page; Ctrl/&#8984;+wheel zooms about the cursor; dragging inside the plot pans; the + / &minus; buttons, the scrollbar, and the arrow keys adjust the view; the &#9678; button expands the time range until the current time sits exactly at its center, mirroring the longer of the before-now and after-now portions onto the shorter side; 0, R, or a double-click resets. A rain drop or a lightning bolt along the top marks forecast hours with rain or thunder, and a moon glyph with its illumination percent marks each local midnight.</li>
-<li><b>Observing windows</b>: the target name links to its CDS Simbad page (new tab); per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, the Moon's phase at mid-night and its rise and set that night (or whether it stays up or down all night), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
-<li><b>Annual calendar</b>: the target name links to its CDS Simbad page (new tab); twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
+<li><b>Observing windows</b>: the Target dropdown lists the first target by default, any other target, or All targets; the target name links to its CDS Simbad page (new tab); per night, the usable windows with durations, transit times and airmass, the field (parallactic-angle) rotation accrued above the airmass threshold, the Moon's phase at mid-night and its rise and set that night (or whether it stays up or down all night), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
+<li><b>Annual calendar</b>: the Target dropdown shows the first target by default, any other target, or All targets; the target name links to its CDS Simbad page (new tab); twelve months of coverage per target &mdash; usable hours, usable nights, hours per night, the span of usable days, and the month's best airmass.</li>
 <li><b>Workspace</b>: save named copies in this browser (each dropdown label shows the saved setup&rsquo;s name, observatory, target count, and save time in UTC), import an exported JSON file, export, Copy link (encodes the full setup in the URL), download the chart as a PNG, and reset to the initial state.</li>
 <li><b>Theme</b>: Dark, Light, or Red for night observing; the choice is remembered in this browser.</li>
 </ul>
@@ -531,13 +535,13 @@ footer li { margin-bottom: 0.2rem; }
 <li>Sharing: the URL encodes the full workspace (&#35;w= fragment) — Copy link in the Workspace panel copies it, and opening it loads that exact setup.</li>
 <li>Workspaces: save named copies in this browser (stored as {state, saved}; copies saved by older versions without a save time keep their name only as the label and still load), import an exported JSON file, or download the chart as a PNG image (Export JSON keeps the desktop-app file shape).</li>
 <li>Now: when the current time falls in the displayed window, a red vertical line with a filled circle at the top of the chart marks it.</li>
-<li>Windows: the dashed line marks your airmass threshold, colored ticks on the time axis mark transits, and the panel below the chart lists per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold, the Moon's phase (illumination and name) at mid-night, that night's Moon rise and set in local time (or a note that the Moon stays up or down for the whole day's part), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
-<li>Annual calendar: per target, twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
+<li>Windows: the dashed line marks your airmass threshold, colored ticks on the time axis mark transits, and the panel below the chart lists, for the target chosen in its Target dropdown (the first by default, any target, or All targets, which adds the any-target cumulative to the header), per-night windows, transit times and airmass, plus the total field (parallactic-angle) rotation accrued while the target is below the threshold, the Moon's phase (illumination and name) at mid-night, that night's Moon rise and set in local time (or a note that the Moon stays up or down for the whole day's part), and, with Weather on, the day's maximum hourly rain chance and average clear-sky fraction.</li>
+<li>Annual calendar: for the target chosen in its Target dropdown (the first by default, any target, or All targets for every one), twelve months of coverage &mdash; usable hours, usable nights (distinct days with at least one usable hour), usable hours per night, the span of usable days, and the local time and airmass of the month&rsquo;s lowest-airmass sample above the horizon. An hour is usable while the target is below the threshold and the sky is dark (sun at or below &minus;12&deg;); sampling is one hour, so windows shorter than about an hour may be missed.</li>
 <li>Weather (hidden by default; enable it with the Weather checkbox in the Display panel): the cloud band fills the plot with the hourly cloud cover; a rain drop along the top marks hours with precipitation or at least a 40% rain chance and a lightning bolt marks thunderstorm hours (WMO weather codes 95/96/99); each per-night list adds the day's maximum hourly rain chance and the average clear-sky fraction. The forecast runs from about 16 days back to about 15 days ahead (needs internet).</li>
 <li>Weather report (hidden by default; enable it with the Weather report checkbox in the Display panel): the current conditions at the observatory, then one row per day for eight days \u2014 condition and its display symbol, min and max temperature, maximum rain chance, mean cloud cover, maximum wind, and the Moon's illumination at the day's closing midnight \u2014 with links to the underlying weather services, including the Meteoblue meteogram for the site's coordinates (needs internet; fetched from open-meteo and cached for one hour; the links open in new tabs).</li>
 <li>Moon symbols: a glyph at each local midnight shows the Moon&rsquo;s phase, with its illumination in percent beside it; always shown, independent of the Moon curve.</li>
 <li>Targets: with Extra info checked, a Target details window under the rows shows each target's full Simbad record (magnitudes in all bands, spectral type, parallax with its uncertainty and the inverted distance, proper motion, radial velocity, and identifiers); a row's status text shows the stored ephemeris point count, and clicking its cross clears the record and ephemeris.</li>
-<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a star chart centered on the selected target, drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, N / E arrows, north up, east left, and a cross on each other workspace target, names to the left of the crosses), plus an inline sky image: a DSS2 color cutout generated by the CDS HiPS2FITS service (up to 15&prime; across at about 1.8&Prime; per pixel; needs internet), a scale bar below it, and a note that the image is unavailable if the service does not reply with one; the chart and the image are centered on the target&rsquo;s J2000 position, so they agree, and the cutout&rsquo;s field of view is twice the chart&rsquo;s radius, so the two cover the same field; the chart and the image are the same fixed size, and each window grows taller, not wider, as its info tables fill in; hovering the star chart or the sky image shows the equatorial coordinates under the cursor and, for the nearest Simbad object drawn in the pane being hovered (the star query reaches past both panes&rsquo; fields to the canvas diagonal), its name and angular offset from the cursor (the nearest object is marked with an encircled crosshair on whichever of the star chart and the sky image shows it, in the theme&rsquo;s highlight color: red in dark and light, white in red/night), with its basic fields below the star chart (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts) and its record fields below the sky image (parallax with uncertainty, distance, proper motion, radial velocity, and identifiers), a dash in a row the object lacks; the record fields come from a second Simbad lookup by name, shown as a "querying" row while in flight (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure);; the star chart&rsquo;s caption links the selected target to its CDS Simbad name-search page (opens in a new tab), clicking the encircled crosshair on the star chart or the sky image opens the hovered object&rsquo;s page (new tab), and target names in the Targets panel open the same pages; the star query pads the radius out to the square canvas&rsquo;s diagonal, so the whole canvas is covered; the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 7.5&prime;, the sky image&rsquo;s maximum field (15&prime; across), with the current radius shown beside it, the chart re-scaling live as the slider moves and the sky image re-fetching to match.</li>
+<li>Finding chart (hidden by default; enable it with the Finding chart checkbox in the Display panel): a star chart centered on the selected target &mdash; the Target dropdown offers each target and an All targets choice, which centers on the first target and marks every workspace target in the field with a cross in its own color (no single center cross) &mdash; drawn from a Simbad coordinate query (needs internet; nearby objects sized by V magnitude, N / E arrows, north up, east left, and a cross on each other workspace target, names to the left of the crosses), plus an inline sky image: a DSS2 color cutout generated by the CDS HiPS2FITS service (up to 15&prime; across at about 1.8&Prime; per pixel; needs internet), a scale bar below it, and a note that the image is unavailable if the service does not reply with one; the chart and the image are centered on the target&rsquo;s J2000 position, so they agree, and the cutout&rsquo;s field of view is twice the chart&rsquo;s radius, so the two cover the same field; the chart and the image are the same fixed size, and each window grows taller, not wider, as its info tables fill in; hovering the star chart or the sky image shows the equatorial coordinates under the cursor and, for the nearest Simbad object drawn in the pane being hovered (the star query reaches past both panes&rsquo; fields to the canvas diagonal), its name and angular offset from the cursor (the nearest object is marked with an encircled crosshair on whichever of the star chart and the sky image shows it, in the theme&rsquo;s highlight color: red in dark and light, white in red/night), with its basic fields below the star chart (RA/Dec, magnitudes in all available bands, spectral type, object type, offset from the target, and bibliography/note counts) and its record fields below the sky image (parallax with uncertainty, distance, proper motion, radial velocity, and identifiers), a dash in a row the object lacks; the record fields come from a second Simbad lookup by name, shown as a "querying" row while in flight (cached per name, throttled to one query per 1.5 s, retried after about 10 minutes on failure);; the star chart&rsquo;s caption links the selected target to its CDS Simbad name-search page (opens in a new tab), clicking the encircled crosshair on the star chart or the sky image opens the hovered object&rsquo;s page (new tab), and target names in the Targets panel open the same pages; the star query pads the radius out to the square canvas&rsquo;s diagonal, so the whole canvas is covered; the zoom slider (logarithmic) runs the search radius from 0.5&prime; to 7.5&prime;, the sky image&rsquo;s maximum field (15&prime; across), with the current radius shown beside it, the chart re-scaling live as the slider moves and the sky image re-fetching to match.</li>
 <li>Moon: with Moon checked, a dashed curve shows the Moon&rsquo;s airmass as seen from the observatory (topocentric position, geocentric position plus diurnal parallax) and the tooltip adds its altitude, illumination fraction, phase name, and angular separation from each target.</li>
 <li>Touch and keys: a single finger pans (on the right edge, bottom edge, or corner of the chart or any panel it resizes that window instead; on the sidebar strip it resizes the left column), two fingers pinch to zoom, and a tap shows the tooltip; the arrow keys pan, + / - zoom around the center, and 0 or r resets the window. With Civil / Nautical twilight checked, thin vertical lines mark the sun&rsquo;s -6&deg; and -12&deg; crossings.</li>
 </ul>
@@ -2739,6 +2743,27 @@ function setStatus(msg) { $("status").textContent = msg || ""; }
 function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
 
 /**
+ * Clamp a panel's target selection to the workspace's targets.
+ *
+ * "all" is always valid. A numeric index is kept only when it is a
+ * whole number in 0 through nobj - 1; anything else (missing, stale,
+ * or out of range after a target was removed) falls back to the first
+ * target, "0".
+ *
+ * @param {*} v - Saved value of state.options.windowsTarget or
+ *     state.options.calendarTarget.
+ * @param {number} nobj - Number of targets in state.objects (0 when
+ *     the state has none).
+ * @returns {string} "all", a valid index as a string, or "0".
+ */
+function clampPanelTarget(v, nobj) {
+  if (v === "all") return "all";
+  var i = parseInt(v, 10);
+  if (isFinite(i) && i >= 0 && i < nobj) return String(i);
+  return "0";
+}
+
+/**
  * Fill the display options with their defaults and apply the preset table.
  *
  * Keeps older saved states and imported files working. Every load path
@@ -2757,7 +2782,8 @@ function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
  * @param {Object} s - Workspace state; its options object is completed
  *     in place with defaults for every display option. The curve option
  *     is validated against the three modes and falls back to
- *     "airmass".
+ *     "airmass". The windowsTarget and calendarTarget options are
+ *     clamped to the target list (clampPanelTarget).
  * @returns {Object} The same state object.
  */
 function normalizeState(s) {
@@ -2797,12 +2823,17 @@ function normalizeState(s) {
     curve: "airmass",
     extraInfo: false,
     finding: false,
+    windowsTarget: "0",
+    calendarTarget: "0",
   };
   if (s.options) {
     for (var k in opts) { if (s.options[k] != null) opts[k] = s.options[k]; }
   }
   if (opts.curve !== "airmass" && opts.curve !== "altitude" && opts.curve !== "azimuth")
     opts.curve = "airmass";
+  var nobj = Array.isArray(s.objects) ? s.objects.length : 0;
+  opts.windowsTarget = clampPanelTarget(opts.windowsTarget, nobj);
+  opts.calendarTarget = clampPanelTarget(opts.calendarTarget, nobj);
   s.options = opts;
   return s;
 }
@@ -3501,6 +3532,10 @@ function renderTargets() {
     box.appendChild(row);
   });
   refreshFindingTargets();
+  refreshTargetSelect($("windows-target"), state.options.windowsTarget);
+  state.options.windowsTarget = $("windows-target").value;
+  refreshTargetSelect($("calendar-target"), state.options.calendarTarget);
+  state.options.calendarTarget = $("calendar-target").value;
   renderTargetDetails();
 }
 
@@ -3735,8 +3770,9 @@ function clearSummary() {
  *
  * @returns {?Object} null when the time range is unparseable; otherwise
  *     {tz (the resolved time zone), threshold (the max airmass), days
- *     ([[startMs, endMs, 'YYYY-MM-DD']]), targets ([{obj (the state
- *     target), name, totalH
+ *     ([[startMs, endMs, 'YYYY-MM-DD']]), targets ([{oi (the state
+ *     target's index in state.objects, for the panel's target
+ *     dropdown filter), obj (the state target), name, totalH
  *     (hours at or below the threshold over the whole range), days
  *     ([{everUp (the target was above the horizon that day), maxAlt
  *     (degrees), runs ([[startMs, endMs)]], transits ([{ms, x (airmass,
@@ -3820,7 +3856,7 @@ function summaryData() {
       dayInfo.push({ everUp: everUp, maxAlt: maxAlt,
                      runs: dayRuns[di], transits: transits });
     });
-    targets.push({ obj: obj, name: name, totalH: totalH, days: dayInfo });
+    targets.push({ oi: oi, obj: obj, name: name, totalH: totalH, days: dayInfo });
   });
   var anyOk = okArrays.length ? okArrays[0].slice() : [];
   okArrays.forEach(function (arr) {
@@ -3887,9 +3923,17 @@ function targetNameLink(displayName, objName) {
  * (targetNameLink, new tab); an unnamed target's placeholder is
  * plain text.
  *
- * Shows the cumulative totals header, then, per target and local day,
- * the window list with durations, the total field rotation accrued
- * while the target is below the airmass threshold (fieldRotationDeg),
+ * The panel lists only the target chosen in its Target dropdown
+ * (state.options.windowsTarget; "all" for every target, a numeric
+ * index as a string for one); the cumulative header carries the
+ * any-target union only when every target is listed. It notes the
+ * selection when the chosen target has no usable coordinates and
+ * asks for a target when there is none at all.
+ *
+ * Shows the cumulative totals header, then, per listed target and
+ * local day, the window list with durations, the total field
+ * rotation accrued while the target is below the airmass threshold
+ * (fieldRotationDeg),
  * transit airmass, the Moon's phase at the local midnight the day's
  * part of the chart touches (the one that ends it when it runs to a
  * midnight, else the one that starts it, else the middle of the
@@ -3911,15 +3955,20 @@ function renderSummary() {
     $("summary-panel").style.display = "none";
     return;
   }
-  var html = "", anyTarget = data.targets.length > 0;
+  var want = state.options.windowsTarget;
+  var shown = data.targets.filter(function (t) {
+    return want === "all" || t.oi === parseInt(want, 10);
+  });
+  var html = "", anyTarget = shown.length > 0;
   if (anyTarget) {
     var head = [];
-    data.targets.forEach(function (t) { head.push(targetNameLink(t.name, t.obj.name) + " " + t.totalH.toFixed(1) + " h"); });
-    head.push("any target " + data.anyH.toFixed(1) + " h");
+    shown.forEach(function (t) { head.push(targetNameLink(t.name, t.obj.name) + " " + t.totalH.toFixed(1) + " h"); });
+    if (want === "all")
+      head.push("any target " + data.anyH.toFixed(1) + " h");
     html = '<div class="sum-total"><b>Cumulative X \u2264 ' +
            data.threshold.toFixed(2) + ':</b>  ' + head.join(";  ") + "</div>";
   }
-  data.targets.forEach(function (t) {
+  shown.forEach(function (t) {
     html += '<div class="sum-target"><b>' + targetNameLink(t.name, t.obj.name) + "</b>";
     t.days.forEach(function (d, di) {
       var parts = [];
@@ -3978,7 +4027,10 @@ function renderSummary() {
     });
     html += "</div>";
   });
-  if (!anyTarget) html = '<div class="sum-empty">Add a target to list its observing windows.</div>';
+  if (!anyTarget)
+    html = data.targets.length === 0
+      ? '<div class="sum-empty">Add a target to list its observing windows.</div>'
+      : '<div class="sum-empty">The selected target has no usable coordinates.</div>';
   box.innerHTML = html;
   $("summary-panel").style.display = "";
 }
@@ -4136,9 +4188,10 @@ var __calCache = { key: null, data: null };
  * threshold, or target list changes.
  *
  * @returns {?Object} null when the time range is unparseable; otherwise
- *     {threshold (max airmass), targets ([{name, obj (the workspace
- *     object, for the name link), months (12 entries per
- *     annualCalendarMonths)}])}.
+ *     {threshold (max airmass), targets ([{oi (the workspace
+ *     object's index in state.objects, for the panel's target
+ *     dropdown filter), name, obj (the workspace object, for the name
+ *     link), months (12 entries per annualCalendarMonths)}])}.
  */
 function calendarData() {
   var startMs = startUtcMs();
@@ -4161,6 +4214,7 @@ function calendarData() {
       parseDec(obj.dec);
     } catch (e) { return; }
     targets.push({
+      oi: oi,
       name: obj.name || "Target " + (oi + 1),
       obj: obj,
       months: annualCalendarMonths(function (ms) { return objCoords(obj, ms); },
@@ -4180,8 +4234,11 @@ function calendarData() {
  * A note explains the sampling grid and the usable definition. The
  * target name is a link to the object's CDS Simbad page
  * (targetNameLink, new tab); an unnamed target's placeholder is
- * plain text. Per target: a season line (max altitude, total usable
- * hours,
+ * plain text. The panel shows only the target chosen in its Target
+ * dropdown (state.options.calendarTarget; "all" for every target, a
+ * numeric index as a string for one), and notes so when the chosen
+ * target has no usable coordinates. Per target: a season line (max
+ * altitude, total usable hours,
  * first-to-last usable month, and the year's lowest-airmass sample
  * above the horizon as local date/time and airmass; or no usable
  * month; or never rises) above a 12-row table: usable hours, usable
@@ -4206,9 +4263,15 @@ function renderCalendar() {
     $("calendar-panel").style.display = "none";
     return;
   }
+  var want = state.options.calendarTarget;
+  var shown = data.targets.filter(function (t) {
+    return want === "all" || t.oi === parseInt(want, 10);
+  });
   var html = "";
   if (data.targets.length === 0) {
     html = '<div class="cal-empty">Add a target to see its annual coverage.</div>';
+  } else if (shown.length === 0) {
+    html = '<div class="cal-empty">The selected target has no usable coordinates.</div>';
   } else {
     html += '<div class="cal-note">Sampled once per hour; usable = X &#8804; ' +
             data.threshold.toFixed(2) + " while the sky is dark (sun " +
@@ -4216,7 +4279,7 @@ function renderCalendar() {
             "month's lowest-airmass sample above the horizon.</div>";
   }
   var tz = resolveTz(state.observatory.timezone);
-  data.targets.forEach(function (t) {
+  shown.forEach(function (t) {
     var maxAlt = -Infinity, minAir = Infinity, totalH = 0,
         seasonA = null, seasonB = null, bestMs = null;
     t.months.forEach(function (m) {
@@ -6048,6 +6111,16 @@ $("bands-chk").addEventListener("change", function () {
   saveState();
   scheduleRedraw();
 });
+$("windows-target").addEventListener("change", function () {
+  state.options.windowsTarget = this.value;
+  saveState();
+  scheduleRedraw();
+});
+$("calendar-target").addEventListener("change", function () {
+  state.options.calendarTarget = this.value;
+  saveState();
+  scheduleRedraw();
+});
 $("moon-chk").addEventListener("change", function () {
   state.options.moon = this.checked;
   saveState();
@@ -6687,7 +6760,8 @@ function sizeFindingCanvas() {
  *     distance from the center.
  * @param {string} label - Name of the center target.
  * @param {number} centerIdx - Index of the center target in
- *     state.objects.
+ *     state.objects, or -1 for the All targets choice (every target in
+ *     the field gets a cross in its own color, no center cross).
  * @param {Object} [highlight] - sim-coo row to mark with an encircled
  *     crosshair in THEME.highlight (the object whose details the hover
  *     panel shows); null or omitted for no mark.
@@ -6735,7 +6809,8 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
     st.__drawn = true;
   }
   ctx.globalAlpha = 1;
-  // Crosses and names for the center and other workspace targets.
+  // Crosses and names: the center and other workspace targets, or
+  // every target in its own color when centerIdx is -1 (All targets).
   var cross = function (pt, color) {
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
@@ -6744,21 +6819,35 @@ function drawFindingChart(center, radiusArcmin, rows, label, centerIdx,
     ctx.moveTo(pt.x, pt.y - 6); ctx.lineTo(pt.x, pt.y + 6);
     ctx.stroke();
   };
-  cross({ x: cx, y: cy }, THEME.fg);
-  ctx.fillStyle = THEME.fg;
   ctx.font = "11px " + FONT;
   ctx.textAlign = "right";
-  ctx.fillText(label, cx - 9, cy - 9);
-  state.objects.forEach(function (obj, idx) {
-    if (idx === centerIdx) return;
-    var c2;
-    try { c2 = objCoords(obj, Date.now()); } catch (e) { return; }
-    var pt = proj(c2.raDeg, c2.dec);
-    if (!pt || !inside(pt)) return;
-    cross(pt, THEME.fg_dim);
-    ctx.fillStyle = THEME.fg_dim;
-    ctx.fillText(obj.name || "Target " + (idx + 1), pt.x - 9, pt.y - 9);
-  });
+  if (centerIdx === -1) {
+    state.objects.forEach(function (obj, idx) {
+      var c2;
+      try { c2 = objCoords(obj, Date.now()); } catch (e) { return; }
+      var pt = proj(c2.raDeg, c2.dec);
+      if (!pt || !inside(pt)) return;
+      var col = /^#[0-9a-fA-F]{6}$/.test(obj.color || "")
+                ? obj.color : PALETTE[idx % PALETTE.length];
+      cross(pt, col);
+      ctx.fillStyle = col;
+      ctx.fillText(obj.name || "Target " + (idx + 1), pt.x - 9, pt.y - 9);
+    });
+  } else {
+    cross({ x: cx, y: cy }, THEME.fg);
+    ctx.fillStyle = THEME.fg;
+    ctx.fillText(label, cx - 9, cy - 9);
+    state.objects.forEach(function (obj, idx) {
+      if (idx === centerIdx) return;
+      var c2;
+      try { c2 = objCoords(obj, Date.now()); } catch (e) { return; }
+      var pt = proj(c2.raDeg, c2.dec);
+      if (!pt || !inside(pt)) return;
+      cross(pt, THEME.fg_dim);
+      ctx.fillStyle = THEME.fg_dim;
+      ctx.fillText(obj.name || "Target " + (idx + 1), pt.x - 9, pt.y - 9);
+    });
+  }
   ctx.textAlign = "left";
   // N / E arrows (north up, east left).
   var arrow = function (x1, y1, x2, y2, text, tx, ty) {
@@ -6859,16 +6948,22 @@ function drawFindingImageOverlay() {
 }
 
 /**
- * Rebuild the finding chart's target combobox.
+ * Rebuild a panel's target combobox.
  *
- * @returns {void} Sets <select id="finding-target"> options from
- *     state.objects (value = index, label = name or "Target n"),
- *     keeping the previous choice when it is still valid and
- *     defaulting to the first target.
+ * One option per workspace target (value = its index, label = the
+ * name or "Target n"), followed by an All targets option (value
+ * all), read by the finding chart, the observing-windows panel, and
+ * the annual calendar as every target. The previous choice is kept
+ * when it is still a valid index or all; otherwise the first target
+ * is selected (with no target, no option matches the value).
+ *
+ * @param {Object} sel - The <select> to rebuild (#finding-target,
+ *     #windows-target, or #calendar-target).
+ * @param {string} current - The choice to keep when still valid: a
+ *     target index as a string, or "all".
+ * @returns {void} Sets sel's options and value.
  */
-function refreshFindingTargets() {
-  var sel = $("finding-target");
-  var prev = sel.value;
+function refreshTargetSelect(sel, current) {
   sel.innerHTML = "";
   state.objects.forEach(function (obj, i) {
     var opt = document.createElement("option");
@@ -6876,11 +6971,30 @@ function refreshFindingTargets() {
     opt.textContent = obj.name || "Target " + (i + 1);
     sel.appendChild(opt);
   });
-  if (state.objects.length > 0) {
-    var keep = parseInt(prev, 10);
-    sel.value = (isFinite(keep) && keep < state.objects.length)
+  var allOpt = document.createElement("option");
+  allOpt.value = "all";
+  allOpt.textContent = "All targets";
+  sel.appendChild(allOpt);
+  var want = String(current == null ? "" : current);
+  if (want === "all") {
+    sel.value = "all";
+  } else {
+    var keep = parseInt(want, 10);
+    sel.value = (isFinite(keep) && keep >= 0 && keep < state.objects.length)
                ? String(keep) : "0";
   }
+}
+
+/**
+ * Rebuild the finding chart's target combobox.
+ *
+ * @returns {void} Sets <select id="finding-target"> options via
+ *     refreshTargetSelect, keeping its current value (a target index
+ *     or all) when it is still valid and defaulting to the first
+ *     target.
+ */
+function refreshFindingTargets() {
+  refreshTargetSelect($("finding-target"), $("finding-target").value);
 }
 
 /**
@@ -7113,6 +7227,11 @@ function clearFindingInfo() {
  * queries in the background, with findingSeq guarding against stale
  * responses. No-op while the option is off.
  *
+ * With the All targets choice, the field centers on the first
+ * target's J2000 position and findingHover carries centerIdx -1,
+ * which drawFindingChart reads as a cross in every target's own
+ * color (no center cross).
+ *
  * @returns {void} Draws #finding-chart (J2000), points the inline sky
  *     image (#finding-img, hips2fitsImageUrl at twice the radius) and the
  *     caption link (#finding-simlink, simbadNameUrl) at the target's
@@ -7138,9 +7257,11 @@ function updateFindingChart() {
     return;
   }
   var sel = $("finding-target");
+  var all = sel.value === "all";
   var i = Math.min(parseInt(sel.value, 10) || 0, state.objects.length - 1);
   var obj = state.objects[i];
   var label = obj.name || "Target " + (i + 1);
+  var centerIdx = all ? -1 : i;
   setFindingSimLink(obj.name ? String(obj.name).trim() : "");
   var c;
   try { c = objCoords(obj, Date.now()); }
@@ -7180,17 +7301,17 @@ function updateFindingChart() {
   var key = c.raDeg.toFixed(4) + "," + c.dec.toFixed(4) + "," + queryRadius.toFixed(1);
   if (findingCache[key]) {
     var tab = findingCache[key];
-    drawFindingChart(c, radiusArcmin, tab.rows, label, i,
+    drawFindingChart(c, radiusArcmin, tab.rows, label, centerIdx,
                      findingChartHighlight);
     findingHover = {center: c, rows: tab.rows, radiusArcmin: radiusArcmin,
-                    label: label, centerIdx: i};
+                    label: label, centerIdx: centerIdx};
     drawFindingImageOverlay();
     status.textContent = (tab.count != null ? tab.count : tab.rows.length) +
       " objects within " + rText + " of " + label;
     return;
   }
   findingHover = {center: c, rows: [], radiusArcmin: radiusArcmin,
-                  label: label, centerIdx: i};
+                  label: label, centerIdx: centerIdx};
   drawFindingImageOverlay();
   var seq = ++findingSeq;
   status.textContent = "Querying Simbad for stars within " + rText +
@@ -7199,10 +7320,10 @@ function updateFindingChart() {
     .then(function (tab) {
       if (seq !== findingSeq) return;
       findingCache[key] = tab;
-      drawFindingChart(c, radiusArcmin, tab.rows, label, i,
+      drawFindingChart(c, radiusArcmin, tab.rows, label, centerIdx,
                        findingChartHighlight);
       findingHover = {center: c, rows: tab.rows, radiusArcmin: radiusArcmin,
-                      label: label, centerIdx: i};
+                      label: label, centerIdx: centerIdx};
       drawFindingImageOverlay();
       status.textContent = (tab.count != null ? tab.count : tab.rows.length) +
         " objects within " + rText + " of " + label;
